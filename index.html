@@ -312,18 +312,31 @@ textarea.form-input{resize:vertical;min-height:72px}
   .stats{grid-template-columns:repeat(2,1fr)}
   .form-row{grid-template-columns:1fr}
 }
-@media(max-width:700px){
+@media(max-width:800px){
   :root{--sidebar-w:0px}
-  .sidebar{display:none}
-  .topbar{display:flex}
-  .mobile-nav{display:grid}
-  .main{margin-left:0;padding-bottom:80px}
-  .page{padding:20px 16px}
+  .sidebar{display:none!important}
+  .topbar{display:flex!important}
+  .mobile-nav{display:grid!important}
+  .main{margin-left:0!important;padding-bottom:90px;width:100%}
+  .page{padding:16px 14px}
   .stats{grid-template-columns:repeat(2,1fr);gap:8px}
   .stat-card{padding:14px}
   .stat-num{font-size:22px}
-  .page-title{font-size:22px}
-  .task-card{padding:14px}
+  .page-title{font-size:21px}
+  .task-card{padding:12px 14px}
+  .task-top{gap:10px}
+  .task-emoji-wrap{width:38px;height:38px;font-size:18px}
+  .task-name{font-size:14px}
+  .badge{font-size:10px;padding:3px 8px}
+  .task-actions{gap:4px}
+  .btn-sm{padding:5px 8px;font-size:11px}
+  .page-header{margin-bottom:16px}
+  .section-hd{margin-bottom:8px}
+  .history-table th,.history-table td{padding:9px 10px;font-size:12px}
+  .modal{padding:20px 16px;border-radius:var(--radius) var(--radius) 0 0;position:fixed;bottom:0;left:0;right:0;max-width:100%;max-height:92vh;margin:0}
+  .modal-overlay{align-items:flex-end;padding:0}
+  .form-footer{flex-wrap:wrap}
+  .form-footer .btn{flex:1;justify-content:center}
 }
 @media print{
   .sidebar,.topbar,.mobile-nav,.task-actions,.btn{display:none!important}
