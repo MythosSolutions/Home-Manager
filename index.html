@@ -104,9 +104,10 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 /* ══ TOPBAR (mobile) ══ */
 .topbar{
   display:none;position:sticky;top:0;z-index:150;
-  background:var(--text);padding:0 16px;
-  height:56px;align-items:center;justify-content:space-between;
-  border-bottom:1px solid rgba(255,255,255,.08)
+  background:var(--text);padding:0 20px;
+  height:60px;align-items:center;justify-content:center;
+  border-bottom:1px solid rgba(255,255,255,.1);
+  width:100%;
 }
 .topbar-brand{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#fff}
 .topbar-menu{background:none;border:none;color:rgba(255,255,255,.7);font-size:22px;cursor:pointer;padding:4px 6px}
@@ -308,16 +309,16 @@ textarea.form-input{resize:vertical;min-height:72px}
 .upload-sub{font-size:11px;color:var(--text3);margin-top:4px}
 
 /* ══ RESPONSIVE ══ */
-@media(max-width:900px){
+@media(max-width:1025px){
   .stats{grid-template-columns:repeat(2,1fr)}
   .form-row{grid-template-columns:1fr}
 }
-@media(max-width:800px){
+@media(max-width:1024px){
   :root{--sidebar-w:0px}
   .sidebar{display:none!important;width:0!important}
   .topbar{display:flex!important}
   .mobile-nav{display:grid!important}
-  .main{margin-left:0!important;padding-bottom:90px;width:100vw;max-width:100vw;overflow-x:hidden}
+  .main{margin-left:0!important;padding-bottom:90px;width:100vw;max-width:100vw;overflow-x:hidden;min-height:100vh}
   .page{padding:16px 14px;width:100%;max-width:100%}
   .stats{grid-template-columns:repeat(2,1fr);gap:8px}
   .stat-card{padding:14px}
@@ -402,8 +403,10 @@ textarea.form-input{resize:vertical;min-height:72px}
 
 <!-- ══ MOBILE TOPBAR ══ -->
 <div class="topbar">
-  <div class="brand-wordmark" style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#fff">MyHomie</div>
-  <button class="add-task-btn" style="width:auto;padding:7px 14px;font-size:12px" onclick="openAddTask()">＋ Task</button>
+  <div style="display:flex;align-items:center;justify-content:center;width:100%;gap:10px">
+    <div style="width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--brand),var(--brand2));display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 3px 10px rgba(91,79,232,.4)">🏡</div>
+    <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#fff;letter-spacing:-.4px">MyHomie</div>
+  </div>
 </div>
 
 <!-- ══ MAIN ══ -->
@@ -1015,7 +1018,7 @@ loadData();render();
 
 // Force mobile layout on small screens
 function checkMobile(){
-  const isMobile = window.innerWidth <= 800;
+  const isMobile = window.innerWidth <= 1024;
   const sidebar = document.querySelector('.sidebar');
   const main = document.querySelector('.main');
   const topbar = document.querySelector('.topbar');
