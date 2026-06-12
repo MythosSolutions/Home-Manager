@@ -321,31 +321,84 @@ textarea.form-input{resize:vertical;min-height:72px}
   .main{
     margin-left:0!important;
     width:100%!important;
-    max-width:100%!important;
+    max-width:100vw!important;
     padding-bottom:90px;
     overflow-x:hidden;
     min-height:100vh;
     display:block!important;
   }
-  .page{padding:16px 14px;width:100%!important;max-width:100%!important;box-sizing:border-box}
-  .stats{grid-template-columns:repeat(2,1fr);gap:8px}
-  .stat-card{padding:14px}
-  .stat-num{font-size:22px}
-  .page-title{font-size:21px}
-  .task-card{padding:12px 14px}
+
+  /* All pages full width */
+  .page{padding:14px 12px;width:100%!important;max-width:100%!important;box-sizing:border-box}
+  .page-header{margin-bottom:14px;flex-direction:column;gap:8px}
+  .page-header .btn{width:100%;justify-content:center}
+  .page-eyebrow{font-size:10px}
+  .page-title{font-size:20px}
+  .page-sub{font-size:12px}
+
+  /* Stats grid */
+  .stats{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px}
+  .stat-card{padding:12px}
+  .stat-num{font-size:20px}
+  .stat-label{font-size:10px}
+
+  /* Task cards */
+  .task-card{padding:12px;margin-bottom:6px}
   .task-top{gap:10px}
-  .task-emoji-wrap{width:38px;height:38px;font-size:18px}
-  .task-name{font-size:14px}
-  .badge{font-size:10px;padding:3px 8px}
-  .task-actions{gap:4px}
+  .task-emoji-wrap{width:36px;height:36px;font-size:17px;flex-shrink:0}
+  .task-name{font-size:13.5px}
+  .task-meta{font-size:11px}
+  .badge{font-size:10px;padding:3px 7px}
+  .task-right{gap:4px}
+  .task-actions{gap:4px;margin-top:8px;padding-top:8px}
   .btn-sm{padding:5px 8px;font-size:11px}
-  .page-header{margin-bottom:16px}
   .section-hd{margin-bottom:8px}
-  .history-table th,.history-table td{padding:9px 10px;font-size:12px}
-  .modal{padding:20px 16px;border-radius:var(--radius) var(--radius) 0 0;position:fixed;bottom:0;left:0;right:0;max-width:100%;max-height:92vh;margin:0}
+  .section-title{font-size:11px}
+
+  /* History table - scroll horizontally */
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .history-table{min-width:500px}
+  .history-table th,.history-table td{padding:8px 10px;font-size:12px}
+
+  /* P&L */
+  .pl-card-header{flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px}
+  .pl-card-title{font-size:11px}
+  .pl-table{min-width:480px}
+  .pl-card{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .month-chart{grid-template-columns:repeat(12,1fr);padding:12px 8px;gap:3px}
+  .month-label{font-size:8px}
+  .month-amt{font-size:8px}
+  .month-bar-wrap{height:60px}
+  .pl-notice{font-size:11.5px;padding:10px 12px}
+  .tax-note{font-size:11px}
+  .chart-legend{padding:10px 14px;gap:8px}
+  .legend-item{font-size:11px}
+
+  /* Filter bar */
+  #filter-bar{overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  #filter-bar .btn{white-space:nowrap;flex-shrink:0}
+
+  /* Modals - slide up from bottom */
+  .modal{padding:20px 16px;border-radius:20px 20px 0 0;position:fixed;bottom:0;left:0;right:0;max-width:100%;max-height:90vh;margin:0}
   .modal-overlay{align-items:flex-end;padding:0}
-  .form-footer{flex-wrap:wrap}
-  .form-footer .btn{flex:1;justify-content:center}
+  .modal-title{font-size:15px}
+  .form-group{margin-bottom:11px}
+  .form-input{padding:9px 11px;font-size:14px}
+  .form-footer{flex-wrap:wrap;gap:6px}
+  .form-footer .btn{flex:1;justify-content:center;min-width:80px}
+
+  /* Template chips scroll horizontally per row */
+  .template-grid{flex-wrap:wrap}
+  .template-chip{font-size:11.5px;padding:4px 9px}
+
+  /* P&L year selector row */
+  #page-pl .page-header{flex-direction:column;align-items:flex-start}
+  #page-pl .page-header > div:last-child{width:100%;display:flex;gap:8px}
+  #pl-year{flex:1}
+  #page-pl .page-header .btn-primary{flex:1;justify-content:center}
+
+  /* Home tags */
+  .home-tag{font-size:10px;padding:2px 6px}
 }
 @media print{
   .sidebar,.topbar,.mobile-nav,.task-actions,.btn{display:none!important}
