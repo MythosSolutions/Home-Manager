@@ -314,11 +314,11 @@ textarea.form-input{resize:vertical;min-height:72px}
 }
 @media(max-width:800px){
   :root{--sidebar-w:0px}
-  .sidebar{display:none!important}
+  .sidebar{display:none!important;width:0!important}
   .topbar{display:flex!important}
   .mobile-nav{display:grid!important}
-  .main{margin-left:0!important;padding-bottom:90px;width:100%}
-  .page{padding:16px 14px}
+  .main{margin-left:0!important;padding-bottom:90px;width:100vw;max-width:100vw;overflow-x:hidden}
+  .page{padding:16px 14px;width:100%;max-width:100%}
   .stats{grid-template-columns:repeat(2,1fr);gap:8px}
   .stat-card{padding:14px}
   .stat-num{font-size:22px}
@@ -360,7 +360,7 @@ textarea.form-input{resize:vertical;min-height:72px}
 </style>
 </head>
 <body>
-<div style="display:flex;min-height:100vh">
+<div style="display:flex;min-height:100vh;overflow-x:hidden">
 
 <!-- ══ SIDEBAR ══ -->
 <aside class="sidebar">
@@ -1012,6 +1012,21 @@ function setMobileActive(el){document.querySelectorAll('.mobile-nav-item').forEa
 
 // ══ INIT ══
 loadData();render();
+
+// Force mobile layout on small screens
+function checkMobile(){
+  const isMobile = window.innerWidth <= 800;
+  const sidebar = document.querySelector('.sidebar');
+  const main = document.querySelector('.main');
+  const topbar = document.querySelector('.topbar');
+  const mobileNav = document.querySelector('.mobile-nav');
+  if(sidebar) sidebar.style.display = isMobile ? 'none' : '';
+  if(main) main.style.marginLeft = isMobile ? '0' : '';
+  if(topbar) topbar.style.display = isMobile ? 'flex' : '';
+  if(mobileNav) mobileNav.style.display = isMobile ? 'grid' : '';
+}
+checkMobile();
+window.addEventListener('resize', checkMobile);
 </script>
 </body>
 </html>
