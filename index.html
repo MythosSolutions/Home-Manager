@@ -400,6 +400,25 @@ textarea.form-input{resize:vertical;min-height:72px}
   /* Home tags */
   .home-tag{font-size:10px;padding:2px 6px}
 }
+/* ══ CALENDAR INVITE ══ */
+.cal-invite-box{
+  background:linear-gradient(135deg,#EEF2FF,#F5F3FF);
+  border:1.5px solid #C7D2FE;border-radius:var(--radius-sm);
+  padding:14px;margin-top:4px
+}
+.cal-invite-header{display:flex;align-items:flex-start;gap:10px}
+.cal-invite-icon{font-size:22px;flex-shrink:0;margin-top:1px}
+.cal-invite-title{font-size:13px;font-weight:600;color:#3730A3}
+.cal-invite-sub{font-size:11.5px;color:#6366F1;margin-top:2px;line-height:1.4}
+.btn-cal{
+  width:100%;padding:10px;background:linear-gradient(135deg,var(--brand),var(--brand2));
+  color:white;border:none;border-radius:var(--radius-sm);font-family:'Inter',sans-serif;
+  font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;gap:7px;transition:all .2s;box-shadow:0 2px 8px rgba(91,79,232,.3)
+}
+.btn-cal:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 14px rgba(91,79,232,.45)}
+.btn-cal:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+
 @media print{
   .sidebar,.topbar,.mobile-nav,.task-actions,.btn{display:none!important}
   .main{margin-left:0!important}
@@ -853,15 +872,29 @@ function taskForm(t){
       <div class="form-group"><label class="form-label">Category</label><input class="form-input" id="f-cat" list="cat-opts" placeholder="e.g. Plumbing" value="${esc(t?.cat||'')}"><datalist id="cat-opts">${[...new Set(TEMPLATES.map(x=>x.cat))].map(c=>`<option value="${c}">`).join('')}</datalist></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Interval (months)</label><input class="form-input" id="f-interval" type="number" min="1" placeholder="12" value="${t?.intervalMonths||''}"></div>
+      <div class="form-group"><label class="form-label">Interval (months)</label><input class="form-input" id="f-interval" type="number" min="1" placeholder="12" value="${t?.intervalMonths||''}" oninput="updateCalBtn()"></div>
       <div class="form-group"><label class="form-label">Property</label><select class="form-input" id="f-home">${homeOpts}</select></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Last Done</label><input class="form-input" id="f-last" type="date" value="${t?.lastDone||''}"></div>
+      <div class="form-group"><label class="form-label">Last Done</label><input class="form-input" id="f-last" type="date" value="${t?.lastDone||''}" onchange="updateCalBtn()"></div>
       <div class="form-group"><label class="form-label">Last Cost ($)</label><input class="form-input" id="f-cost" type="number" min="0" placeholder="0" value="${t?.lastCost||''}"></div>
     </div>
     <div class="form-group"><label class="form-label">Vendor</label><input class="form-input" id="f-vendor" placeholder="ABC Services" value="${esc(t?.vendor||'')}"></div>
-    <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes" placeholder="Any details...">${esc(t?.notes||'')}</textarea></div>`;
+    <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="f-notes" placeholder="Any details...">${esc(t?.notes||'')}</textarea></div>
+    <div class="cal-invite-box" id="cal-invite-box">
+      <div class="cal-invite-header">
+        <span class="cal-invite-icon">📅</span>
+        <div>
+          <div class="cal-invite-title">Send Calendar Reminder</div>
+          <div class="cal-invite-sub" id="cal-invite-sub">Enter "Last Done" date and interval to calculate next due date</div>
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:10px;margin-bottom:8px">
+        <label class="form-label">Your Email</label>
+        <input class="form-input" id="f-email" type="email" placeholder="you@email.com" oninput="updateCalBtn()" value="${esc(t?.email||'')}">
+      </div>
+      <button class="btn btn-cal" id="cal-btn" onclick="sendCalInvite()" disabled>📅 Download Calendar Invite</button>
+    </div>`;
 }
 function prefill(name){
   const t=TEMPLATES.find(x=>x.name===name);if(!t)return;
@@ -883,7 +916,8 @@ function taskFromForm(existingId){
     lastDone:document.getElementById('f-last').value||null,
     vendor:(document.getElementById('f-vendor').value||'').trim()||null,
     lastCost:document.getElementById('f-cost').value?Number(document.getElementById('f-cost').value):null,
-    notes:(document.getElementById('f-notes').value||'').trim()||null};
+    notes:(document.getElementById('f-notes').value||'').trim()||null,
+    email:(document.getElementById('f-email')?.value||'').trim()||null};
 }
 function saveNewTask(){const t=taskFromForm(null);if(!t)return;tasks.push(t);saveData();render();closeModal();}
 function openEdit(id){
@@ -1059,6 +1093,105 @@ function renderPL(){
     <div class="tax-note"><strong>Tax note:</strong> Home maintenance is generally not deductible for a primary residence. Capital improvements that add value or extend the property's life may affect cost basis at time of sale. Consult your tax advisor.</div>`;
 
   el.innerHTML=html;
+}
+
+// ══ CALENDAR INVITE ══
+function updateCalBtn(){
+  const lastDone = document.getElementById('f-last')?.value;
+  const interval = parseInt(document.getElementById('f-interval')?.value);
+  const email = (document.getElementById('f-email')?.value||'').trim();
+  const btn = document.getElementById('cal-btn');
+  const sub = document.getElementById('cal-invite-sub');
+  if(!btn) return;
+
+  if(lastDone && interval && interval > 0){
+    const due = new Date(lastDone + 'T12:00:00');
+    due.setMonth(due.getMonth() + interval);
+    const formatted = due.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+    if(sub) sub.textContent = `Next due: ${formatted}`;
+    btn.disabled = !email;
+  } else {
+    if(sub) sub.textContent = 'Enter "Last Done" date and interval to calculate next due date';
+    btn.disabled = true;
+  }
+}
+
+function sendCalInvite(){
+  const name = (document.getElementById('f-name')?.value||'').trim() || 'Home Maintenance Task';
+  const lastDone = document.getElementById('f-last')?.value;
+  const interval = parseInt(document.getElementById('f-interval')?.value);
+  const email = (document.getElementById('f-email')?.value||'').trim();
+  const notes = (document.getElementById('f-notes')?.value||'').trim();
+  const vendor = (document.getElementById('f-vendor')?.value||'').trim();
+
+  if(!lastDone || !interval || !email){ alert('Please fill in Last Done, Interval, and Email first.'); return; }
+
+  const due = new Date(lastDone + 'T12:00:00');
+  due.setMonth(due.getMonth() + interval);
+
+  // Format dates for ICS (YYYYMMDD)
+  function icsDate(d){
+    return d.getFullYear().toString() +
+      String(d.getMonth()+1).padStart(2,'0') +
+      String(d.getDate()).padStart(2,'0');
+  }
+
+  const start = icsDate(due);
+  // End date = same day (all-day event)
+  const end = icsDate(new Date(due.getTime() + 86400000));
+  const now = new Date();
+  const stamp = now.toISOString().replace(/[-:]/g,'').replace(/\.\d{3}/,'');
+  const uid = 'myhomie-' + Date.now() + '@myhomie.app';
+
+  let desc = `MyHomie Reminder: ${name}`;
+  if(vendor) desc += `\nVendor: ${vendor}`;
+  if(notes) desc += `\nNotes: ${notes}`;
+  desc += `\n\nService interval: every ${interval} month${interval===1?'':'s'}`;
+  desc += `\nScheduled by MyHomie — your home maintenance manager`;
+
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//MyHomie//Home Manager//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTAMP:${stamp}Z`,
+    `DTSTART;VALUE=DATE:${start}`,
+    `DTEND;VALUE=DATE:${end}`,
+    `SUMMARY:🏡 ${name} — Service Due`,
+    `DESCRIPTION:${desc}`,
+    `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${email}`,
+    `ORGANIZER;CN=MyHomie:mailto:noreply@myhomie.app`,
+    'BEGIN:VALARM',
+    'TRIGGER:-P7D',
+    'ACTION:DISPLAY',
+    `DESCRIPTION:Reminder: ${name} is due in 7 days`,
+    'END:VALARM',
+    'BEGIN:VALARM',
+    'TRIGGER:-P1D',
+    'ACTION:DISPLAY',
+    `DESCRIPTION:Reminder: ${name} is due tomorrow`,
+    'END:VALARM',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+
+  // Download the .ics file
+  const blob = new Blob([ics], {type:'text/calendar;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${name.replace(/[^a-z0-9]/gi,'-')}-reminder.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  // Show success
+  const btn = document.getElementById('cal-btn');
+  if(btn){ btn.textContent = '✓ Downloaded! Open the file to add to your calendar'; btn.style.background='var(--green)'; setTimeout(()=>{ btn.textContent='📅 Download Calendar Invite'; btn.style.background=''; },4000); }
 }
 
 // ══ MODAL UTILS ══
