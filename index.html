@@ -797,20 +797,38 @@ let homes=[],tasks=[],history=[],docs=[],activeHomeId='all',activeFilter='All';
 // ══ DATA — Supabase ══
 async function loadData(){
   if(!currentUser) return;
+
+  // Show loading indicator in main area
+  const showLoading = () => {
+    const el = document.getElementById('due-list');
+    if(el) el.innerHTML = '<div class="empty"><div class="loading-spinner" style="margin:0 auto;border-color:var(--border);border-top-color:var(--brand)"></div><div class="empty-sub" style="margin-top:12px">Loading your data...</div></div>';
+  };
+  showLoading();
+
+  // Timeout after 10 seconds — show app anyway with empty state
+  const timer = setTimeout(()=>{
+    console.warn('loadData timed out');
+    homes=[{id:'home1',name:'My Home',color:'indigo',address:''}];
+    tasks=[];history=[];docs=[];
+    render();
+  }, 10000);
+
   try {
     // Load homes
-    const {data:hData} = await sb.from('homes').select('*').order('created_at');
+    const {data:hData,error:hErr} = await sb.from('homes').select('*').order('created_at');
+    if(hErr) throw hErr;
     homes = (hData||[]).map(h=>({id:h.id,name:h.name,color:h.color||'indigo',address:h.address||''}));
     if(homes.length===0){
-      // Create default home for new user
-      const {data:newHome} = await sb.from('homes').insert({
+      const {data:newHome,error:nhErr} = await sb.from('homes').insert({
         user_id:currentUser.id, name:'My Home', color:'indigo', address:''
       }).select().single();
+      if(nhErr) throw nhErr;
       if(newHome) homes=[{id:newHome.id,name:newHome.name,color:newHome.color||'indigo',address:newHome.address||''}];
     }
 
     // Load tasks
-    const {data:tData} = await sb.from('tasks').select('*').order('created_at');
+    const {data:tData,error:tErr} = await sb.from('tasks').select('*').order('created_at');
+    if(tErr) throw tErr;
     tasks = (tData||[]).map(t=>({
       id:t.id, homeId:t.home_id, name:t.name, icon:t.icon||'🏠',
       cat:t.cat||'General', intervalMonths:t.interval_months||12,
@@ -819,19 +837,26 @@ async function loadData(){
     }));
 
     // Load history
-    const {data:histData} = await sb.from('history').select('*').order('date',{ascending:false});
+    const {data:histData,error:histErr} = await sb.from('history').select('*').order('date',{ascending:false});
+    if(histErr) throw histErr;
     history = (histData||[]).map(h=>({
       id:h.id, taskId:h.task_id, taskName:h.task_name,
       homeId:h.home_id, date:h.date, vendor:h.vendor||null,
       cost:h.cost||null, notes:h.notes||null
     }));
 
-    // docs still in localStorage (large binary data)
+    // docs still in localStorage
     try{docs=JSON.parse(localStorage.getItem(DOK))||[];}catch(e){docs=[];}
     try{activeHomeId=localStorage.getItem(ACK)||'all';}catch(e){}
     if(activeHomeId!=='all'&&!homes.find(h=>h.id===activeHomeId))activeHomeId='all';
+
+    clearTimeout(timer);
   } catch(err){
+    clearTimeout(timer);
     console.error('loadData error:',err);
+    // Show error but don't block app
+    const el = document.getElementById('due-list');
+    if(el) el.innerHTML = `<div class="empty"><span class="empty-icon">⚠️</span><div class="empty-text">Couldn't load data</div><div class="empty-sub">${err.message||'Check your connection and try refreshing.'}</div></div>`;
   }
 }
 
@@ -1514,8 +1539,12 @@ function onSignedIn(){
   document.getElementById('user-menu').style.display = 'block';
   // Auto-fill email in calendar invites
   window._userEmail = email;
-  // Load data
-  await loadData();render();checkMobile();
+  // Show app immediately, then load data
+  checkMobile();
+  document.getElementById('app-wrapper').style.display='';
+  render();
+  await loadData();
+  render();
 }
 
 async function signIn(){
