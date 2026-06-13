@@ -1385,14 +1385,30 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let currentUser = null;
 
 async function initAuth(){
-  document.getElementById('loading-screen').classList.add('show');
-  const { data: { session } } = await supabase.auth.getSession();
-  if(session?.user){
-    currentUser = session.user;
-    onSignedIn();
-  } else {
+  const loadingEl = document.getElementById('loading-screen');
+  loadingEl.classList.add('show');
+
+  // Safety timeout — if Supabase hangs, show auth screen after 4 seconds
+  const timeout = setTimeout(()=>{
+    console.warn('Supabase timeout — showing auth screen');
+    showAuthScreen();
+  }, 4000);
+
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    clearTimeout(timeout);
+    if(session?.user){
+      currentUser = session.user;
+      onSignedIn();
+    } else {
+      showAuthScreen();
+    }
+  } catch(err) {
+    clearTimeout(timeout);
+    console.error('Supabase error:', err);
     showAuthScreen();
   }
+
   supabase.auth.onAuthStateChange((event, session) => {
     if(event === 'SIGNED_IN' && session?.user){
       currentUser = session.user;
@@ -1408,6 +1424,14 @@ function showAuthScreen(){
   document.getElementById('loading-screen').classList.remove('show');
   document.getElementById('auth-screen').classList.add('show');
   document.getElementById('app-wrapper').style.display = 'none';
+}
+
+function showAppDirectly(){
+  // Fallback: skip auth entirely for local testing
+  document.getElementById('loading-screen').classList.remove('show');
+  document.getElementById('auth-screen').classList.remove('show');
+  document.getElementById('app-wrapper').style.display = '';
+  loadData();render();checkMobile();
 }
 
 function onSignedIn(){
