@@ -1520,7 +1520,7 @@ async function initAuth(){
     clearTimeout(timeout);
 
     if(error){ console.error('Session error:',error); showAuthScreen(); return; }
-    if(data?.session?.user){ currentUser=data.session.user; onSignedIn(); }
+    if(data?.session?.user){ currentUser=data.session.user; await onSignedIn(); }
     else { showAuthScreen(); }
 
     sb.auth.onAuthStateChange((event,session)=>{
@@ -1550,7 +1550,7 @@ function showAppDirectly(){
   loadData();render();checkMobile();
 }
 
-function onSignedIn(){
+async function onSignedIn(){
   document.getElementById('loading-screen').classList.remove('show');
   document.getElementById('auth-screen').classList.remove('show');
   document.getElementById('app-wrapper').style.display = '';
