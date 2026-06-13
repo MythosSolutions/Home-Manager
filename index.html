@@ -794,24 +794,51 @@ const TEMPLATES=[
 
 let homes=[],tasks=[],history=[],docs=[],activeHomeId='all',activeFilter='All';
 
-// ══ DATA ══
-function loadData(){
-  try{homes=JSON.parse(localStorage.getItem(HOK))||[];}catch(e){homes=[];}
-  try{tasks=JSON.parse(localStorage.getItem(SK))||[];}catch(e){tasks=[];}
-  try{docs=JSON.parse(localStorage.getItem(DOK))||[];}catch(e){docs=[];}
-  try{history=JSON.parse(localStorage.getItem(HK))||[];}catch(e){history=[];}
-  try{activeHomeId=localStorage.getItem(ACK)||'all';}catch(e){}
-  if(homes.length===0){homes.push({id:'home1',name:'My Home',color:'indigo',address:''});localStorage.setItem(HOK,JSON.stringify(homes));}
-  tasks.forEach(t=>{if(!t.homeId)t.homeId=homes[0].id;});
-  history.forEach(h=>{if(!h.homeId)h.homeId=homes[0].id;});
-  if(activeHomeId!=='all'&&!homes.find(h=>h.id===activeHomeId))activeHomeId='all';
+// ══ DATA — Supabase ══
+async function loadData(){
+  if(!currentUser) return;
+  try {
+    // Load homes
+    const {data:hData} = await sb.from('homes').select('*').order('created_at');
+    homes = (hData||[]).map(h=>({id:h.id,name:h.name,color:h.color||'indigo',address:h.address||''}));
+    if(homes.length===0){
+      // Create default home for new user
+      const {data:newHome} = await sb.from('homes').insert({
+        user_id:currentUser.id, name:'My Home', color:'indigo', address:''
+      }).select().single();
+      if(newHome) homes=[{id:newHome.id,name:newHome.name,color:newHome.color||'indigo',address:newHome.address||''}];
+    }
+
+    // Load tasks
+    const {data:tData} = await sb.from('tasks').select('*').order('created_at');
+    tasks = (tData||[]).map(t=>({
+      id:t.id, homeId:t.home_id, name:t.name, icon:t.icon||'🏠',
+      cat:t.cat||'General', intervalMonths:t.interval_months||12,
+      lastDone:t.last_done||null, vendor:t.vendor||null,
+      lastCost:t.last_cost||null, notes:t.notes||null, email:t.email||null
+    }));
+
+    // Load history
+    const {data:histData} = await sb.from('history').select('*').order('date',{ascending:false});
+    history = (histData||[]).map(h=>({
+      id:h.id, taskId:h.task_id, taskName:h.task_name,
+      homeId:h.home_id, date:h.date, vendor:h.vendor||null,
+      cost:h.cost||null, notes:h.notes||null
+    }));
+
+    // docs still in localStorage (large binary data)
+    try{docs=JSON.parse(localStorage.getItem(DOK))||[];}catch(e){docs=[];}
+    try{activeHomeId=localStorage.getItem(ACK)||'all';}catch(e){}
+    if(activeHomeId!=='all'&&!homes.find(h=>h.id===activeHomeId))activeHomeId='all';
+  } catch(err){
+    console.error('loadData error:',err);
+  }
 }
-function saveData(){
-  localStorage.setItem(SK,JSON.stringify(tasks));
-  localStorage.setItem(DOK,JSON.stringify(docs));
-  localStorage.setItem(HK,JSON.stringify(history));
-  localStorage.setItem(HOK,JSON.stringify(homes));
-  localStorage.setItem(ACK,activeHomeId);
+
+async function saveData(){
+  // docs and activeHomeId still in localStorage
+  try{localStorage.setItem(DOK,JSON.stringify(docs));}catch(e){}
+  try{localStorage.setItem(ACK,activeHomeId);}catch(e){}
 }
 function homeColor(homeId){
   const home=homes.find(h=>h.id===homeId);
@@ -907,7 +934,7 @@ function renderHomeSwitcher(){
   });
   el.innerHTML=html;
 }
-function setActiveHome(id){activeHomeId=id;activeFilter='All';saveData();render();}
+function setActiveHome(id){activeHomeId=id;activeFilter='All';try{localStorage.setItem(ACK,activeHomeId);}catch(e){}render();}
 
 // ══ RENDER ══
 function render(){
@@ -997,23 +1024,29 @@ function homeModal(home){
 }
 function selectColor(id){document.querySelectorAll('#color-swatches .color-swatch').forEach(el=>el.classList.toggle('selected',el.dataset.color===id));}
 function getSelectedColor(){const s=document.querySelector('#color-swatches .color-swatch.selected');return s?s.dataset.color:'indigo';}
-function saveHome(editId){
+async function saveHome(editId){
   const name=(document.getElementById('hf-name').value||'').trim();
   if(!name){alert('Please enter a property name.');return;}
   const address=(document.getElementById('hf-address').value||'').trim(),color=getSelectedColor();
-  if(editId){const i=homes.findIndex(h=>h.id===editId);if(i>=0)homes[i]={...homes[i],name,address,color};}
-  else homes.push({id:'home'+Date.now(),name,address,color});
-  saveData();render();closeModal();
+  if(editId){
+    await sb.from('homes').update({name,address,color}).eq('id',editId);
+    const i=homes.findIndex(h=>h.id===editId);
+    if(i>=0)homes[i]={...homes[i],name,address,color};
+  } else {
+    const {data} = await sb.from('homes').insert({user_id:currentUser.id,name,address,color}).select().single();
+    if(data) homes.push({id:data.id,name:data.name,color:data.color||'indigo',address:data.address||''});
+  }
+  render();closeModal();
 }
-function deleteHome(id){
+async function deleteHome(id){
   if(homes.length<=1){alert('You need at least one property.');return;}
-  if(!confirm('Delete this property? Tasks will move to your first property.'))return;
-  const fb=homes.find(h=>h.id!==id)?.id;
-  tasks.forEach(t=>{if(t.homeId===id)t.homeId=fb;});
-  history.forEach(h=>{if(h.homeId===id)h.homeId=fb;});
+  if(!confirm('Delete this property? Tasks assigned to it will also be deleted.'))return;
+  await sb.from('homes').delete().eq('id',id);
   homes=homes.filter(h=>h.id!==id);
+  tasks=tasks.filter(t=>t.homeId!==id);
+  history=history.filter(h=>h.homeId!==id);
   if(activeHomeId===id)activeHomeId='all';
-  saveData();render();closeModal();
+  render();closeModal();
 }
 
 // ══ ADD/EDIT TASK ══
@@ -1089,14 +1122,34 @@ function taskFromForm(existingId){
     notes:(document.getElementById('f-notes').value||'').trim()||null,
     email:(document.getElementById('f-email')?.value||'').trim()||null};
 }
-function saveNewTask(){const t=taskFromForm(null);if(!t)return;tasks.push(t);saveData();render();closeModal();}
+async function saveNewTask(){
+  const t=taskFromForm(null);if(!t)return;
+  const {data} = await sb.from('tasks').insert({
+    user_id:currentUser.id, home_id:t.homeId, name:t.name, icon:t.icon,
+    cat:t.cat, interval_months:t.intervalMonths, last_done:t.lastDone||null,
+    vendor:t.vendor||null, last_cost:t.lastCost||null, notes:t.notes||null, email:t.email||null
+  }).select().single();
+  if(data){
+    tasks.push({...t,id:data.id});
+    render();closeModal();
+  }
+}
 function openEdit(id){
   const t=tasks.find(x=>x.id===id);if(!t)return;
   modal(`<div class="modal-header"><div class="modal-title">Edit Task</div><button class="modal-close" onclick="closeModal()">×</button></div>
     ${taskForm(t)}
     <div class="form-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEdit('${id}')">Save Changes</button></div>`);
 }
-function saveEdit(id){const t=taskFromForm(id);if(!t)return;const i=tasks.findIndex(x=>x.id===id);if(i>=0)tasks[i]=t;saveData();render();closeModal();}
+async function saveEdit(id){
+  const t=taskFromForm(id);if(!t)return;
+  await sb.from('tasks').update({
+    home_id:t.homeId, name:t.name, icon:t.icon, cat:t.cat,
+    interval_months:t.intervalMonths, last_done:t.lastDone||null,
+    vendor:t.vendor||null, last_cost:t.lastCost||null, notes:t.notes||null, email:t.email||null
+  }).eq('id',id);
+  const i=tasks.findIndex(x=>x.id===id);if(i>=0)tasks[i]=t;
+  render();closeModal();
+}
 
 // ══ MARK DONE ══
 function openMarkDone(id){
@@ -1113,15 +1166,27 @@ function openMarkDone(id){
     <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="md-notes" placeholder="Anything worth remembering..."></textarea></div>
     <div class="form-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmDone('${id}')">✓ Confirm Done</button></div>`);
 }
-function confirmDone(id){
+async function confirmDone(id){
   const t=tasks.find(x=>x.id===id);if(!t)return;
   const date=document.getElementById('md-date').value;
   const vendor=(document.getElementById('md-vendor').value||'').trim();
   const cost=document.getElementById('md-cost').value;
   const notes=(document.getElementById('md-notes').value||'').trim();
+  // Update task
+  await sb.from('tasks').update({
+    last_done:date,
+    vendor:vendor||t.vendor||null,
+    last_cost:cost?Number(cost):(t.lastCost||null)
+  }).eq('id',id);
   t.lastDone=date;if(vendor)t.vendor=vendor;if(cost)t.lastCost=Number(cost);
-  history.push({id:'h'+Date.now(),taskId:id,taskName:t.name,homeId:t.homeId,date,vendor:vendor||null,cost:cost?Number(cost):null,notes:notes||null});
-  saveData();render();closeModal();
+  // Insert history
+  const {data:hData} = await sb.from('history').insert({
+    user_id:currentUser.id, task_id:id, task_name:t.name,
+    home_id:t.homeId, date, vendor:vendor||null,
+    cost:cost?Number(cost):null, notes:notes||null
+  }).select().single();
+  if(hData) history.unshift({id:hData.id,taskId:id,taskName:t.name,homeId:t.homeId,date,vendor:vendor||null,cost:cost?Number(cost):null,notes:notes||null});
+  render();closeModal();
 }
 
 // ══ TASK HISTORY ══
@@ -1134,9 +1199,12 @@ function openTaskHistory(id){
   modal(`<div class="modal-header"><div class="modal-title">${t.icon} ${esc(t.name)}</div><button class="modal-close" onclick="closeModal()">×</button></div>
     ${rows}<div style="text-align:right;margin-top:16px"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`);
 }
-function deleteTask(id){
+async function deleteTask(id){
   if(!confirm('Delete this task?'))return;
-  tasks=tasks.filter(t=>t.id!==id);saveData();render();
+  await sb.from('tasks').delete().eq('id',id);
+  tasks=tasks.filter(t=>t.id!==id);
+  history=history.filter(h=>h.taskId!==id);
+  render();
 }
 
 // ══ DOCUMENTS ══
@@ -1447,7 +1515,7 @@ function onSignedIn(){
   // Auto-fill email in calendar invites
   window._userEmail = email;
   // Load data
-  loadData();render();checkMobile();
+  await loadData();render();checkMobile();
 }
 
 async function signIn(){
@@ -1494,6 +1562,7 @@ async function resetPassword(){
 async function signOut(){
   await sb.auth.signOut();
   homes=[];tasks=[];history=[];docs=[];
+  try{localStorage.removeItem(ACK);localStorage.removeItem(DOK);}catch(e){}
   document.getElementById('user-menu').style.display='none';
 }
 
