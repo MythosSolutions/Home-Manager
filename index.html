@@ -1380,7 +1380,7 @@ function setMobileActive(el){document.querySelectorAll('.mobile-nav-item').forEa
 // ══ SUPABASE AUTH ══
 const SUPABASE_URL = 'https://zhxmwxemecxlqrvlzagt.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpoeG13eGVtZWN4bHFydmx6YWd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzMDYxNDMsImV4cCI6MjA5Njg4MjE0M30.2hWD3WNAY-Ht5V5krm0KIwOzAxGq7OY9T8lvmYjkfEc';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentUser = null;
 
@@ -1395,7 +1395,7 @@ async function initAuth(){
   }, 4000);
 
   try {
-    const { data: { session }, error } = await supabase.auth.getSession();
+    const { data: { session }, error } = await sb.auth.getSession();
     clearTimeout(timeout);
     if(session?.user){
       currentUser = session.user;
@@ -1409,7 +1409,7 @@ async function initAuth(){
     showAuthScreen();
   }
 
-  supabase.auth.onAuthStateChange((event, session) => {
+  sb.auth.onAuthStateChange((event, session) => {
     if(event === 'SIGNED_IN' && session?.user){
       currentUser = session.user;
       onSignedIn();
@@ -1458,7 +1458,7 @@ async function signIn(){
   errEl.classList.remove('show');
   if(!email||!password){errEl.textContent='Please enter your email and password.';errEl.classList.add('show');return;}
   btn.textContent = 'Signing in...';btn.disabled = true;
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await sb.auth.signInWithPassword({ email, password });
   btn.textContent = 'Sign In';btn.disabled = false;
   if(error){errEl.textContent = error.message;errEl.classList.add('show');}
 }
@@ -1473,7 +1473,7 @@ async function signUp(){
   if(!email||!password){errEl.textContent='Please fill in all fields.';errEl.classList.add('show');return;}
   if(password.length < 6){errEl.textContent='Password must be at least 6 characters.';errEl.classList.add('show');return;}
   if(password !== password2){errEl.textContent='Passwords do not match.';errEl.classList.add('show');return;}
-  const { error } = await supabase.auth.signUp({ email, password });
+  const { error } = await sb.auth.signUp({ email, password });
   if(error){errEl.textContent = error.message;errEl.classList.add('show');}
   else{sucEl.textContent = 'Account created! Check your email to confirm, then sign in.';sucEl.classList.add('show');}
 }
@@ -1484,7 +1484,7 @@ async function resetPassword(){
   const sucEl = document.getElementById('forgot-success');
   errEl.classList.remove('show');sucEl.classList.remove('show');
   if(!email){errEl.textContent='Please enter your email.';errEl.classList.add('show');return;}
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
     redirectTo: window.location.origin
   });
   if(error){errEl.textContent = error.message;errEl.classList.add('show');}
@@ -1492,7 +1492,7 @@ async function resetPassword(){
 }
 
 async function signOut(){
-  await supabase.auth.signOut();
+  await sb.auth.signOut();
   homes=[];tasks=[];history=[];docs=[];
   document.getElementById('user-menu').style.display='none';
 }
