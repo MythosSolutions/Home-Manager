@@ -1512,9 +1512,6 @@ async function initAuth(){
   }, 6000);
 
   try {
-    // Wait a tick to ensure CDN is loaded
-    await new Promise(r => setTimeout(r, 100));
-
     if(!createSupabaseClient()){
       throw new Error('Could not initialize Supabase');
     }
