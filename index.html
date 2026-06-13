@@ -1473,44 +1473,52 @@ function setMobileActive(el){document.querySelectorAll('.mobile-nav-item').forEa
 // ══ SUPABASE AUTH ══
 const SUPABASE_URL = 'https://zhxmwxemecxlqrvlzagt.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpoeG13eGVtZWN4bHFydmx6YWd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzMDYxNDMsImV4cCI6MjA5Njg4MjE0M30.2hWD3WNAY-Ht5V5krm0KIwOzAxGq7OY9T8lvmYjkfEc';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Use sessionStorage for auth on mobile (clears when tab closes)
+// App data lives in Supabase database — not local storage
+const isMobileBrowser = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    persistSession: true,
+    storageKey: 'myhomie-auth',
+    storage: isMobileBrowser ? window.sessionStorage : window.localStorage,
+    autoRefreshToken: true,
+    detectSessionInUrl: false
+  }
+});
 
 let currentUser = null;
 
 async function initAuth(){
-  const loadingEl = document.getElementById('loading-screen');
-  loadingEl.classList.add('show');
+  document.getElementById('loading-screen').classList.add('show');
+  document.getElementById('app-wrapper').style.display = 'none';
+  document.getElementById('auth-screen').classList.remove('show');
 
-  // Safety timeout — if Supabase hangs, show auth screen after 4 seconds
+  // Hard 5-second timeout
   const timeout = setTimeout(()=>{
-    console.warn('Supabase timeout — showing auth screen');
+    console.warn('Supabase timed out');
     showAuthScreen();
-  }, 4000);
+  }, 5000);
 
   try {
-    const { data: { session }, error } = await sb.auth.getSession();
+    if(!window.supabase){ throw new Error('Supabase not loaded'); }
+    const { data, error } = await sb.auth.getSession();
     clearTimeout(timeout);
-    if(session?.user){
-      currentUser = session.user;
-      onSignedIn();
-    } else {
-      showAuthScreen();
-    }
-  } catch(err) {
+    if(error){ console.error('Session error:',error); showAuthScreen(); return; }
+    if(data?.session?.user){ currentUser=data.session.user; onSignedIn(); }
+    else { showAuthScreen(); }
+  } catch(err){
     clearTimeout(timeout);
-    console.error('Supabase error:', err);
+    console.error('initAuth failed:',err);
     showAuthScreen();
   }
 
-  sb.auth.onAuthStateChange((event, session) => {
-    if(event === 'SIGNED_IN' && session?.user){
-      currentUser = session.user;
-      onSignedIn();
-    } else if(event === 'SIGNED_OUT'){
-      currentUser = null;
-      showAuthScreen();
-    }
-  });
+  try {
+    sb.auth.onAuthStateChange((event,session)=>{
+      console.log('Auth event:',event);
+      if(event==='SIGNED_IN'&&session?.user){ currentUser=session.user; onSignedIn(); }
+      else if(event==='SIGNED_OUT'){ currentUser=null; showAuthScreen(); }
+    });
+  } catch(err){ console.error('onAuthStateChange error:',err); }
 }
 
 function showAuthScreen(){
