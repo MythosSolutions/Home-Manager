@@ -671,6 +671,11 @@ textarea.form-input{resize:vertical;min-height:72px}
       </div>
       <button class="btn btn-primary" onclick="openAddFile()">＋ Add File</button>
     </div>
+    <div style="position:relative;margin-bottom:14px">
+      <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:15px;pointer-events:none;opacity:.5">🔍</span>
+      <input class="form-input" id="files-search" placeholder="Search by appliance, task, document type, or file name..."
+        style="padding-left:40px" oninput="renderFiles()">
+    </div>
     <div id="files-filter-bar" style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap"></div>
     <div id="files-content"></div>
   </div>
@@ -1736,10 +1741,28 @@ const APPLIANCE_LIST = [
 
 let filesActiveFilter = 'All';
 
+function fileMatchesSearch(d, q){
+  if(!q) return true;
+  const task = d.taskId ? tasks.find(t=>t.id===d.taskId) : null;
+  const app = d.applianceId ? appliances.find(a=>a.id===d.applianceId) : null;
+  const haystack = [
+    d.name,
+    d.docType||'',
+    task ? task.name : '',
+    task ? task.cat : '',
+    app ? app.name : '',
+    app ? app.brand : '',
+    app ? app.model : ''
+  ].join(' ').toLowerCase();
+  return haystack.includes(q);
+}
+
 function renderFiles(){
   const el = document.getElementById('files-content');
   const fb = document.getElementById('files-filter-bar');
   if(!el) return;
+
+  const q = (document.getElementById('files-search')?.value||'').trim().toLowerCase();
 
   // Filter bar
   const filters = ['All','Tasks','Appliances'];
@@ -1753,10 +1776,11 @@ function renderFiles(){
   });
 
   el.innerHTML = '';
+  let shownCount = 0;
 
   // ── Task documents ──
   if(filesActiveFilter === 'All' || filesActiveFilter === 'Tasks'){
-    const taskDocs = docs.filter(d=>d.taskId);
+    const taskDocs = docs.filter(d=>d.taskId && fileMatchesSearch(d, q));
     if(taskDocs.length > 0){
       const label = document.createElement('div');
       label.className = 'files-section-label';
@@ -1769,18 +1793,17 @@ function renderFiles(){
         grid.appendChild(makeFileCard(d, task ? `${task.icon} ${task.name}` : 'Task', 'task'));
       });
       el.appendChild(grid);
-    } else if(filesActiveFilter === 'Tasks'){
-      el.innerHTML = '<div class="empty"><span class="empty-icon">📎</span><div class="empty-text">No task documents yet</div><div class="empty-sub">Mark a task done and attach an invoice or photo.</div></div>';
+      shownCount += taskDocs.length;
     }
   }
 
   // ── Appliance documents ──
   if(filesActiveFilter === 'All' || filesActiveFilter === 'Appliances'){
-    const appDocs = docs.filter(d=>d.applianceId);
+    const appDocs = docs.filter(d=>d.applianceId && fileMatchesSearch(d, q));
     if(appDocs.length > 0){
       const label = document.createElement('div');
       label.className = 'files-section-label';
-      label.style.marginTop = filesActiveFilter==='All' ? '24px' : '0';
+      label.style.marginTop = el.children.length>0 ? '24px' : '0';
       label.textContent = '🏠 Appliance Documents';
       el.appendChild(label);
       const grid = document.createElement('div');
@@ -1790,8 +1813,7 @@ function renderFiles(){
         grid.appendChild(makeFileCard(d, app ? app.name : 'Appliance', 'appliance'));
       });
       el.appendChild(grid);
-    } else if(filesActiveFilter === 'Appliances'){
-      el.innerHTML = '<div class="empty"><span class="empty-icon">🏠</span><div class="empty-text">No appliance documents yet</div><div class="empty-sub">Add warranties, manuals, and receipts for your appliances.</div></div>';
+      shownCount += appDocs.length;
     }
   }
 
@@ -1803,9 +1825,13 @@ function renderFiles(){
     });
   }, 50);
 
-  // Empty state
+  // Empty states
   if(docs.length === 0){
     el.innerHTML = '<div class="empty"><span class="empty-icon">📁</span><div class="empty-text">No files yet</div><div class="empty-sub">Add invoices, warranties, and photos to keep everything in one place.</div></div>';
+  } else if(shownCount === 0){
+    el.innerHTML = q
+      ? `<div class="empty"><span class="empty-icon">🔍</span><div class="empty-text">No files match "${esc(q)}"</div><div class="empty-sub">Try a different appliance, task, or document type.</div></div>`
+      : '<div class="empty"><span class="empty-icon">📁</span><div class="empty-text">No files in this category</div><div class="empty-sub">Switch tabs or add a new file.</div></div>';
   }
 }
 
