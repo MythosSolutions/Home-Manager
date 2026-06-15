@@ -318,7 +318,7 @@ textarea.form-input{resize:vertical;min-height:72px}
   #app-wrapper{display:block!important}
   .sidebar{display:none!important;width:0!important;position:absolute!important;left:-9999px!important}
   .topbar{display:flex!important}
-  .mobile-nav{display:grid!important}
+  .mobile-nav{display:grid!important;grid-template-columns:repeat(6,1fr)!important}
   .main{
     margin-left:0!important;
     width:100%!important;
@@ -419,6 +419,18 @@ textarea.form-input{resize:vertical;min-height:72px}
 }
 .btn-cal:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 14px rgba(91,79,232,.45)}
 .btn-cal:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* ══ ALL FILES ══ */
+.files-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px}
+.file-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow);transition:all .15s;cursor:pointer}
+.file-card:hover{box-shadow:var(--shadow-md);border-color:var(--border2);transform:translateY(-1px)}
+.file-card-icon{width:48px;height:48px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:10px}
+.file-card-name{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px}
+.file-card-meta{font-size:11px;color:var(--text3)}
+.file-card-tag{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;background:var(--brand-light);color:var(--brand);margin-top:6px}
+.file-card-img{width:100%;height:100px;object-fit:cover;border-radius:8px;margin-bottom:10px}
+.files-section-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;margin-top:4px}
+.appliance-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:500;background:var(--green-bg);color:var(--green-text)}
 
 @media print{
   .sidebar,.topbar,.mobile-nav,.task-actions,.btn{display:none!important}
@@ -559,6 +571,9 @@ textarea.form-input{resize:vertical;min-height:72px}
     <button class="nav-item" onclick="switchPage('pl',this)" id="nav-pl">
       <span class="nav-icon">💰</span> P&amp;L Report
     </button>
+    <button class="nav-item" onclick="switchPage('files',this)" id="nav-files">
+      <span class="nav-icon">📁</span> All Files
+    </button>
   </nav>
 
   <div class="sidebar-footer">
@@ -646,6 +661,20 @@ textarea.form-input{resize:vertical;min-height:72px}
     <div id="pl-content"></div>
   </div>
 
+  <!-- All Files -->
+  <div class="page" id="page-files">
+    <div class="page-header">
+      <div>
+        <div class="page-eyebrow">Documents</div>
+        <div class="page-title">All Files</div>
+        <div class="page-sub">Save all your invoices, warranties, and documentation here. Link to your tasks or add to an appliance.</div>
+      </div>
+      <button class="btn btn-primary" onclick="openAddFile()">＋ Add File</button>
+    </div>
+    <div id="files-filter-bar" style="display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap"></div>
+    <div id="files-content"></div>
+  </div>
+
 </main>
 
 <!-- Mobile bottom nav -->
@@ -661,6 +690,9 @@ textarea.form-input{resize:vertical;min-height:72px}
   </button>
   <button class="mobile-nav-item" onclick="switchPage('history',this);setMobileActive(this)">
     <span class="mobile-nav-icon">📋</span>History
+  </button>
+  <button class="mobile-nav-item" onclick="switchPage('files',this);setMobileActive(this)">
+    <span class="mobile-nav-icon">📁</span>Files
   </button>
   <button class="mobile-nav-item" onclick="switchPage('pl',this);setMobileActive(this)">
     <span class="mobile-nav-icon">💰</span>P&amp;L
@@ -815,7 +847,7 @@ const TEMPLATES=[
   {name:'Condo fees',icon:'🏙️',cat:'Fees',months:1},
 ];
 
-let homes=[],tasks=[],history=[],docs=[],activeHomeId='all',activeFilter='All';
+let homes=[],tasks=[],history=[],docs=[],appliances=[],activeHomeId='all',activeFilter='All';
 
 // ══ DATA — Supabase ══
 async function loadData(){
@@ -867,6 +899,10 @@ async function loadData(){
       homeId:h.home_id, date:h.date, vendor:h.vendor||null,
       cost:h.cost||null, notes:h.notes||null
     }));
+
+    // Load appliances
+    const {data:appData,error:appErr} = await sb.from('appliances').select('*').order('created_at');
+    if(!appErr) appliances = (appData||[]).map(a=>({id:a.id,homeId:a.home_id,name:a.name,brand:a.brand||null,model:a.model||null,notes:a.notes||null}));
 
     // docs still in localStorage
     try{docs=JSON.parse(localStorage.getItem(DOK))||[];}catch(e){docs=[];}
@@ -1608,6 +1644,269 @@ function sendCalInvite(){
   if(btn){ btn.textContent = '✓ Downloaded! Open the file to add to your calendar'; btn.style.background='var(--green)'; setTimeout(()=>{ btn.textContent='📅 Download Calendar Invite'; btn.style.background=''; },4000); }
 }
 
+// ══ ALL FILES ══
+const APPLIANCE_LIST = [
+  'Dishwasher','Refrigerator','Washing Machine','Dryer','Oven / Range','Microwave',
+  'Air Conditioner','Furnace / Heater','Water Heater','Garbage Disposal',
+  'Freezer','Wine Fridge','Ice Maker','Range Hood','Washer/Dryer Combo',
+  'Heat Pump','Sump Pump','Generator','Pool Pump','Garage Door Opener',
+  'Security System','Smart Thermostat','Solar Panels','EV Charger','Other'
+];
+
+let filesActiveFilter = 'All';
+
+function renderFiles(){
+  const el = document.getElementById('files-content');
+  const fb = document.getElementById('files-filter-bar');
+  if(!el) return;
+
+  // Filter bar
+  const filters = ['All','Tasks','Appliances'];
+  fb.innerHTML = '';
+  filters.forEach(f=>{
+    const b = document.createElement('button');
+    b.className = 'btn btn-sm' + (f===filesActiveFilter?' btn-primary':' btn-ghost');
+    b.textContent = f;
+    b.onclick = ()=>{ filesActiveFilter=f; renderFiles(); };
+    fb.appendChild(b);
+  });
+
+  el.innerHTML = '';
+
+  // ── Task documents ──
+  if(filesActiveFilter === 'All' || filesActiveFilter === 'Tasks'){
+    const taskDocs = docs.filter(d=>d.taskId);
+    if(taskDocs.length > 0){
+      const label = document.createElement('div');
+      label.className = 'files-section-label';
+      label.textContent = '📎 Task Documents';
+      el.appendChild(label);
+      const grid = document.createElement('div');
+      grid.className = 'files-grid';
+      taskDocs.forEach(d=>{
+        const task = tasks.find(t=>t.id===d.taskId);
+        grid.appendChild(makeFileCard(d, task ? `${task.icon} ${task.name}` : 'Task', 'task'));
+      });
+      el.appendChild(grid);
+    } else if(filesActiveFilter === 'Tasks'){
+      el.innerHTML = '<div class="empty"><span class="empty-icon">📎</span><div class="empty-text">No task documents yet</div><div class="empty-sub">Mark a task done and attach an invoice or photo.</div></div>';
+    }
+  }
+
+  // ── Appliance documents ──
+  if(filesActiveFilter === 'All' || filesActiveFilter === 'Appliances'){
+    const appDocs = docs.filter(d=>d.applianceId);
+    if(appDocs.length > 0){
+      const label = document.createElement('div');
+      label.className = 'files-section-label';
+      label.style.marginTop = filesActiveFilter==='All' ? '24px' : '0';
+      label.textContent = '🏠 Appliance Documents';
+      el.appendChild(label);
+      const grid = document.createElement('div');
+      grid.className = 'files-grid';
+      appDocs.forEach(d=>{
+        const app = appliances.find(a=>a.id===d.applianceId);
+        grid.appendChild(makeFileCard(d, app ? app.name : 'Appliance', 'appliance'));
+      });
+      el.appendChild(grid);
+    } else if(filesActiveFilter === 'Appliances'){
+      el.innerHTML = '<div class="empty"><span class="empty-icon">🏠</span><div class="empty-text">No appliance documents yet</div><div class="empty-sub">Add warranties, manuals, and receipts for your appliances.</div></div>';
+    }
+  }
+
+  // Empty state
+  if(docs.length === 0){
+    el.innerHTML = '<div class="empty"><span class="empty-icon">📁</span><div class="empty-text">No files yet</div><div class="empty-sub">Add invoices, warranties, and photos to keep everything in one place.</div></div>';
+  }
+}
+
+function makeFileCard(d, tagLabel, tagType){
+  const div = document.createElement('div');
+  div.className = 'file-card';
+  const isImage = d.type && d.type.startsWith('image/');
+  const tagColor = tagType==='task' ? 'background:var(--brand-light);color:var(--brand)' : 'background:var(--green-bg);color:var(--green-text)';
+  div.innerHTML = `
+    ${isImage ? `<img src="${d.data}" class="file-card-img" onclick="previewDoc('${d.id}')" alt="${esc(d.name)}">` :
+      `<div class="file-card-icon">${docIcon(d.type)}</div>`}
+    <div class="file-card-name" title="${esc(d.name)}">${esc(d.name)}</div>
+    <div class="file-card-meta">${fmtSize(d.size)} · ${fmtDate(d.uploadedAt)}</div>
+    <div style="margin-top:6px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px">
+      <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;${tagColor}">${esc(tagLabel)}</span>
+      <div style="display:flex;gap:4px">
+        ${isImage ? `<button class="btn btn-sm btn-ghost" style="padding:3px 7px" onclick="previewDoc('${d.id}')">👁</button>` : ''}
+        <button class="btn btn-sm btn-ghost" style="padding:3px 7px" onclick="downloadDoc('${d.id}')">⬇</button>
+        <button class="btn btn-sm btn-ghost" style="padding:3px 7px;color:var(--red)" onclick="deleteFileFromAll('${d.id}')">🗑</button>
+      </div>
+    </div>`;
+  return div;
+}
+
+function deleteFileFromAll(docId){
+  if(!confirm('Delete this file?')) return;
+  docs = docs.filter(d=>d.id!==docId);
+  try{ localStorage.setItem('hm-docs-v4', JSON.stringify(docs)); }catch(e){}
+  renderFiles();
+  render();
+}
+
+function openAddFile(){
+  // Build task options
+  const taskOpts = tasks.map(t=>`<option value="task:${t.id}">${t.icon} ${esc(t.name)}</option>`).join('');
+  // Build appliance options
+  const appOpts = appliances.map(a=>`<option value="app:${a.id}">${esc(a.name)}${a.brand?' ('+esc(a.brand)+')':''}</option>`).join('');
+
+  modal(`<div class="modal-header"><div class="modal-title">📁 Add File</div><button class="modal-close" onclick="closeModal()">×</button></div>
+
+    <div class="form-group">
+      <label class="form-label">Link To</label>
+      <select class="form-input" id="af-link-type" onchange="handleAfLinkChange()">
+        <option value="">— Select —</option>
+        <optgroup label="Tasks">${taskOpts}</optgroup>
+        <optgroup label="My Appliances">${appOpts}</optgroup>
+        <option value="new-appliance">＋ Add New Appliance</option>
+      </select>
+    </div>
+
+    <div id="af-new-appliance" style="display:none">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em">New Appliance</div>
+        <div class="form-group">
+          <label class="form-label">Appliance Type</label>
+          <select class="form-input" id="af-app-type" onchange="handleAfAppType()">
+            <option value="">— Select type —</option>
+            ${APPLIANCE_LIST.map(a=>`<option value="${a}">${a}</option>`).join('')}
+          </select>
+        </div>
+        <div id="af-app-other-wrap" style="display:none">
+          <div class="form-group"><label class="form-label">Appliance Name</label><input class="form-input" id="af-app-other" placeholder="e.g. Water Softener"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Brand (optional)</label><input class="form-input" id="af-app-brand" placeholder="e.g. Samsung"></div>
+          <div class="form-group"><label class="form-label">Model (optional)</label><input class="form-input" id="af-app-model" placeholder="e.g. WF45R6100AW"></div>
+        </div>
+        <div class="form-group"><label class="form-label">Property</label>
+          <select class="form-input" id="af-app-home">
+            ${homes.map(h=>`<option value="${h.id}">${h.name}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Upload File</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center;padding:10px" onclick="document.getElementById('af-camera').click()">📷 Take Photo</button>
+        <button class="btn btn-ghost" style="flex:1;justify-content:center;padding:10px" onclick="document.getElementById('af-file').click()">📄 Upload File</button>
+      </div>
+      <input type="file" id="af-camera" accept="image/*" capture="environment" style="display:none" onchange="handleAfFile(event)">
+      <input type="file" id="af-file" accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple style="display:none" onchange="handleAfFile(event)">
+      <div id="af-preview" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+
+    <div class="form-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAddFile()">Save File</button>
+    </div>`);
+
+  window._afPendingDocs = [];
+}
+
+function handleAfLinkChange(){
+  const val = document.getElementById('af-link-type')?.value;
+  const newApp = document.getElementById('af-new-appliance');
+  if(newApp) newApp.style.display = val==='new-appliance' ? 'block' : 'none';
+}
+
+function handleAfAppType(){
+  const val = document.getElementById('af-app-type')?.value;
+  const wrap = document.getElementById('af-app-other-wrap');
+  if(wrap) wrap.style.display = val==='Other' ? 'block' : 'none';
+}
+
+function handleAfFile(event){
+  const files = Array.from(event.target.files);
+  const preview = document.getElementById('af-preview');
+  if(!files.length) return;
+  files.forEach(file=>{
+    if(file.size > 4*1024*1024){ alert('"'+file.name+'" is too large. Max 4MB.'); return; }
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const doc = {
+        id: 'd'+Date.now()+Math.random().toString(36).slice(2,6),
+        name: file.name, type: file.type||'application/octet-stream',
+        size: file.size, data: e.target.result,
+        uploadedAt: new Date().toISOString().slice(0,10),
+        taskId: null, applianceId: null, histId: null
+      };
+      if(!window._afPendingDocs) window._afPendingDocs = [];
+      window._afPendingDocs.push(doc);
+      if(preview){
+        const isImg = file.type.startsWith('image/');
+        const row = document.createElement('div');
+        row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-xs);border:1px solid var(--border)';
+        row.innerHTML=`<span style="font-size:18px">${isImg?'🖼️':file.type==='application/pdf'?'📄':'📎'}</span>
+          <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(file.name)}</div>
+          <div style="font-size:11px;color:var(--text3)">${fmtSize(file.size)}</div></div>
+          ${isImg?`<img src="${e.target.result}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0">`:''}
+          <button onclick="this.parentElement.remove();window._afPendingDocs=window._afPendingDocs.filter(d=>d.id!=='${doc.id}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 6px">×</button>`;
+        preview.appendChild(row);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+  event.target.value='';
+}
+
+async function saveAddFile(){
+  if(!window._afPendingDocs || window._afPendingDocs.length===0){
+    alert('Please select at least one file.');return;
+  }
+  const linkVal = (document.getElementById('af-link-type')?.value||'').trim();
+  if(!linkVal){ alert('Please select what to link this file to.');return; }
+
+  let taskId = null, applianceId = null;
+
+  if(linkVal.startsWith('task:')){
+    taskId = linkVal.replace('task:','');
+  } else if(linkVal.startsWith('app:')){
+    applianceId = linkVal.replace('app:','');
+  } else if(linkVal==='new-appliance'){
+    // Create new appliance first
+    const appType = document.getElementById('af-app-type')?.value;
+    if(!appType){ alert('Please select an appliance type.');return; }
+    const appName = appType==='Other'
+      ? (document.getElementById('af-app-other')?.value||'').trim()
+      : appType;
+    if(!appName){ alert('Please enter the appliance name.');return; }
+    const brand = (document.getElementById('af-app-brand')?.value||'').trim()||null;
+    const model = (document.getElementById('af-app-model')?.value||'').trim()||null;
+    const homeId = document.getElementById('af-app-home')?.value || homes[0]?.id;
+
+    const {data:newApp,error:appErr} = await sb.from('appliances').insert({
+      user_id: currentUser.id, home_id: homeId,
+      name: appName, brand, model
+    }).select().single();
+
+    if(appErr){ alert('Error saving appliance: '+appErr.message);return; }
+    if(newApp){
+      appliances.push({id:newApp.id,homeId:newApp.home_id,name:newApp.name,brand:newApp.brand||null,model:newApp.model||null});
+      applianceId = newApp.id;
+    }
+  }
+
+  // Save all pending docs
+  window._afPendingDocs.forEach(doc=>{
+    doc.taskId = taskId;
+    doc.applianceId = applianceId;
+    docs.push(doc);
+  });
+  try{ localStorage.setItem('hm-docs-v4', JSON.stringify(docs)); }catch(e){}
+  window._afPendingDocs = [];
+  closeModal();
+  renderFiles();
+  render();
+}
+
 // ══ MODAL UTILS ══
 function modal(html){document.getElementById('modal-content').innerHTML=html;document.getElementById('modal').classList.add('open');}
 function closeModal(){document.getElementById('modal').classList.remove('open');}
@@ -1618,6 +1917,7 @@ function switchPage(name,el){
   document.getElementById('page-'+name).classList.add('active');
   if(el?.classList?.contains('nav-item'))el.classList.add('active');
   if(name==='pl')renderPL();
+  if(name==='files')renderFiles();
 }
 function setMobileActive(el){document.querySelectorAll('.mobile-nav-item').forEach(n=>n.classList.remove('active'));el.classList.add('active');}
 
