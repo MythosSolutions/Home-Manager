@@ -976,11 +976,15 @@ function render(){
   if(overdue.length>0){badge.textContent=overdue.length;badge.style.display='inline';}
   else badge.style.display='none';
 
+  // Total cost this calendar year
+  const thisYearStart = new Date(new Date().getFullYear(),0,1);
+  const thisYearCost = vH.filter(h=>h.cost&&new Date(h.date)>=thisYearStart).reduce((s,h)=>s+(Number(h.cost)||0),0);
+
   document.getElementById('stats-grid').innerHTML=`
     <div class="stat-card c-brand"><div class="stat-label">Total Tasks</div><div class="stat-num brand">${vT.length}</div></div>
     <div class="stat-card c-red"><div class="stat-label">Need Attention</div><div class="stat-num danger">${overdue.length}</div></div>
     <div class="stat-card c-amber"><div class="stat-label">Due This Year</div><div class="stat-num amber">${upcoming.length}</div></div>
-    <div class="stat-card c-green"><div class="stat-label">Avg Job Cost</div><div class="stat-num success">${avgCost?fmtMoney(avgCost):'—'}</div></div>`;
+    <div class="stat-card c-green"><div class="stat-label">Total Yearly Cost</div><div class="stat-num success">${thisYearCost?fmtMoney(thisYearCost):'—'}</div></div>`;
 
   const dueEl=document.getElementById('due-list');dueEl.innerHTML='';
   if(due.length===0)dueEl.innerHTML='<div class="empty"><span class="empty-icon">✅</span><div class="empty-text">All caught up!</div><div class="empty-sub">Nothing overdue right now.</div></div>';
@@ -1087,6 +1091,14 @@ function openAddTask(){
     <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Task Details</div>
     ${taskForm()}
     <div class="form-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveNewTask()">Save Task</button></div>`);
+  // Auto-fill email immediately after modal renders
+  setTimeout(()=>{
+    const emailEl = document.getElementById('f-email');
+    if(emailEl && !emailEl.value){
+      emailEl.value = window._userEmail || currentUser?.email || '';
+    }
+    updateCalBtn();
+  }, 50);
 }
 function taskForm(t){
   const homeOpts=homes.map(h=>{
@@ -1119,7 +1131,7 @@ function taskForm(t){
       </div>
       <div class="form-group" style="margin-top:10px;margin-bottom:8px">
         <label class="form-label">Your Email</label>
-        <input class="form-input" id="f-email" type="email" placeholder="you@email.com" oninput="updateCalBtn()" value="${esc(t?.email||'')}">
+        <input class="form-input" id="f-email" type="email" placeholder="you@email.com" oninput="updateCalBtn()" value="${esc(t?.email||window._userEmail||(currentUser?.email)||'')}">
       </div>
       <button class="btn btn-cal" id="cal-btn" onclick="sendCalInvite()" disabled>📅 Download Calendar Invite</button>
     </div>`;
@@ -1164,6 +1176,13 @@ function openEdit(id){
   modal(`<div class="modal-header"><div class="modal-title">Edit Task</div><button class="modal-close" onclick="closeModal()">×</button></div>
     ${taskForm(t)}
     <div class="form-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEdit('${id}')">Save Changes</button></div>`);
+  setTimeout(()=>{
+    const emailEl = document.getElementById('f-email');
+    if(emailEl && !emailEl.value){
+      emailEl.value = window._userEmail || currentUser?.email || '';
+    }
+    updateCalBtn();
+  }, 50);
 }
 async function saveEdit(id){
   const t=taskFromForm(id);if(!t)return;
@@ -1360,6 +1379,11 @@ function renderPL(){
 
 // ══ CALENDAR INVITE ══
 function updateCalBtn(){
+  // Auto-fill email from logged in user if field is empty
+  const emailEl = document.getElementById('f-email');
+  if(emailEl && !emailEl.value && (window._userEmail || currentUser?.email)){
+    emailEl.value = window._userEmail || currentUser?.email || '';
+  }
   const lastDone = document.getElementById('f-last')?.value;
   const interval = parseInt(document.getElementById('f-interval')?.value);
   const email = (document.getElementById('f-email')?.value||'').trim();
