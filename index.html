@@ -910,7 +910,7 @@ async function loadData(){
       id:d.id, taskId:d.task_id||null, histId:d.hist_id||null,
       applianceId:d.appliance_id||null, name:d.name,
       type:d.file_type||'application/octet-stream',
-      size:d.size||0, path:d.storage_path,
+      size:d.size||0, path:d.storage_path, docType:d.doc_type||null,
       uploadedAt:d.created_at?d.created_at.slice(0,10):null
     }));
     try{activeHomeId=localStorage.getItem(ACK)||'all';}catch(e){}
@@ -1373,7 +1373,7 @@ async function deleteTask(id){
 
 // ══ DOCUMENTS ══
 // ══ SUPABASE STORAGE HELPERS ══
-async function uploadToStorage(file, taskId=null, histId=null, applianceId=null){
+async function uploadToStorage(file, taskId=null, histId=null, applianceId=null, docType=null){
   if(!currentUser) throw new Error('Not logged in');
   const ext = file.name.split('.').pop();
   const path = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).slice(2,6)}.${ext}`;
@@ -1384,7 +1384,7 @@ async function uploadToStorage(file, taskId=null, histId=null, applianceId=null)
   });
   if(upErr) throw upErr;
   // Save metadata to docs table
-  const {data:docRow, error:dbErr} = await sb.from('docs').insert({
+  const row = {
     user_id: currentUser.id,
     task_id: taskId||null,
     hist_id: histId||null,
@@ -1393,13 +1393,15 @@ async function uploadToStorage(file, taskId=null, histId=null, applianceId=null)
     file_type: file.type||'application/octet-stream',
     size: file.size,
     storage_path: path
-  }).select().single();
+  };
+  if(docType) row.doc_type = docType;
+  const {data:docRow, error:dbErr} = await sb.from('docs').insert(row).select().single();
   if(dbErr) throw dbErr;
   const doc = {
     id:docRow.id, taskId:taskId||null, histId:histId||null,
     applianceId:applianceId||null, name:file.name,
     type:file.type||'application/octet-stream',
-    size:file.size, path:path,
+    size:file.size, path:path, docType:docType||null,
     uploadedAt:new Date().toISOString().slice(0,10)
   };
   docs.push(doc);
@@ -1816,6 +1818,7 @@ function makeFileCard(d, tagLabel, tagType){
     ${isImage ? `<img id="fcard-${d.id}" class="file-card-img" onclick="previewDoc('${d.id}')" alt="${esc(d.name)}" style="cursor:pointer">` :
       `<div class="file-card-icon">${docIcon(d.type)}</div>`}
     <div class="file-card-name" title="${esc(d.name)}">${esc(d.name)}</div>
+    ${d.docType?`<div style="font-size:10px;font-weight:600;color:var(--brand);margin-bottom:3px">${esc(d.docType)}</div>`:''}
     <div class="file-card-meta">${fmtSize(d.size)} · ${fmtDate(d.uploadedAt)}</div>
     <div style="margin-top:6px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px">
       <span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;${tagColor}">${esc(tagLabel)}</span>
@@ -1845,6 +1848,20 @@ function openAddFile(){
         <optgroup label="Tasks">${taskOpts}</optgroup>
         <optgroup label="My Appliances">${appOpts}</optgroup>
         <option value="new-appliance">＋ Add New Appliance</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Document Type</label>
+      <select class="form-input" id="af-doc-type">
+        <option value="">— Select type (optional) —</option>
+        <option value="Instruction Manual">Instruction Manual</option>
+        <option value="Warranty">Warranty</option>
+        <option value="Receipt / Invoice">Receipt / Invoice</option>
+        <option value="Inspection Report">Inspection Report</option>
+        <option value="Insurance Document">Insurance Document</option>
+        <option value="Photo">Photo</option>
+        <option value="Other">Other</option>
       </select>
     </div>
 
@@ -1968,15 +1985,23 @@ async function saveAddFile(){
     }
   }
 
-  // Upload all pending files to Supabase Storage
-  if(!window._afPendingFiles || window._afPendingFiles.length===0){
+  // Gather files — prefer pending list, fall back to reading inputs directly (bulletproof)
+  let filesToUpload = (window._afPendingFiles||[]).map(f=>f.file);
+  if(filesToUpload.length===0){
+    const camEl = document.getElementById('af-camera');
+    const fileEl = document.getElementById('af-file');
+    if(camEl && camEl.files.length) filesToUpload.push(...Array.from(camEl.files));
+    if(fileEl && fileEl.files.length) filesToUpload.push(...Array.from(fileEl.files));
+  }
+  if(filesToUpload.length===0){
     alert('Please select at least one file to upload.');
     return;
   }
+  const docType = document.getElementById('af-doc-type')?.value || null;
   const saveBtn = document.querySelector('#modal-content .btn-primary');
   if(saveBtn){saveBtn.textContent='Uploading...';saveBtn.disabled=true;}
-  for(const {file} of window._afPendingFiles){
-    try{ await uploadToStorage(file, taskId, null, applianceId); }
+  for(const file of filesToUpload){
+    try{ await uploadToStorage(file, taskId, null, applianceId, docType); }
     catch(err){ console.error('Upload error:',err); alert('Error uploading "'+file.name+'": '+err.message); }
   }
   window._afPendingFiles = [];
