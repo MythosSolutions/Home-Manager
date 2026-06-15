@@ -1264,7 +1264,7 @@ async function saveEdit(id){
 function openMarkDone(id){
   const t=tasks.find(x=>x.id===id);if(!t)return;
   // Reset pending uploads for this session
-  window._pendingDocs = [];
+  window._pendingFiles = [];
   modal(`<div class="modal-header"><div class="modal-title">${t.icon} Mark Done</div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:${homes.length>1?8:16}px">${esc(t.name)}</div>
     ${homes.length>1?`<div style="margin-bottom:16px">${homeTagHtml(t.homeId)}</div>`:''}
@@ -1889,7 +1889,7 @@ function openAddFile(){
       <button class="btn btn-primary" onclick="saveAddFile()">Save File</button>
     </div>`);
 
-  window._afPendingDocs = [];
+  window._afPendingFiles = [];
 }
 
 function handleAfLinkChange(){
@@ -1935,9 +1935,6 @@ function handleAfFile(event){
 }
 
 async function saveAddFile(){
-  if(!window._afPendingDocs || window._afPendingDocs.length===0){
-    alert('Please select at least one file.');return;
-  }
   const linkVal = (document.getElementById('af-link-type')?.value||'').trim();
   if(!linkVal){ alert('Please select what to link this file to.');return; }
 
@@ -1973,8 +1970,8 @@ async function saveAddFile(){
 
   // Upload all pending files to Supabase Storage
   if(!window._afPendingFiles || window._afPendingFiles.length===0){
-    // No files selected — still save the appliance if new one was created
-    closeModal(); renderFiles(); return;
+    alert('Please select at least one file to upload.');
+    return;
   }
   const saveBtn = document.querySelector('#modal-content .btn-primary');
   if(saveBtn){saveBtn.textContent='Uploading...';saveBtn.disabled=true;}
