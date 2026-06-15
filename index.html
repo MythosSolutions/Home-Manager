@@ -764,32 +764,55 @@ const HOME_COLORS=[
 ];
 
 const TEMPLATES=[
-  {name:'HVAC service',icon:'❄️',cat:'Climate',months:12,notes:'Check refrigerant, clean coils, replace filter'},
-  {name:'Furnace inspection',icon:'🔥',cat:'Climate',months:12},
-  {name:'Air filter replacement',icon:'💨',cat:'Climate',months:3},
-  {name:'AC tune-up',icon:'🌡️',cat:'Climate',months:12},
+  // Heating & Cooling
+  {name:'HVAC service',icon:'❄️',cat:'Heating & Cooling',months:12,notes:'Check refrigerant, clean coils, replace filter'},
+  {name:'Furnace inspection',icon:'🔥',cat:'Heating & Cooling',months:12},
+  {name:'Air filter replacement',icon:'💨',cat:'Heating & Cooling',months:3},
+  {name:'AC tune-up',icon:'🌡️',cat:'Heating & Cooling',months:12},
+  {name:'Humidifier/dehumidifier service',icon:'💧',cat:'Heating & Cooling',months:12},
+  {name:'Duct cleaning or duct inspection',icon:'🌬️',cat:'Heating & Cooling',months:36},
+  {name:'Heat pump service',icon:'♨️',cat:'Heating & Cooling',months:12},
+  {name:'Fireplace/gas insert service',icon:'🔥',cat:'Heating & Cooling',months:12},
+  // Exterior
   {name:'Pest control',icon:'🐛',cat:'Exterior',months:6},
   {name:'Gutter cleaning',icon:'🍂',cat:'Exterior',months:6},
   {name:'Roof inspection',icon:'🏠',cat:'Exterior',months:24},
   {name:'Exterior paint',icon:'🖌️',cat:'Exterior',months:60},
   {name:'Driveway sealing',icon:'🛣️',cat:'Exterior',months:24},
   {name:'Deck staining',icon:'🪵',cat:'Exterior',months:24},
-  {name:'Water heater flush',icon:'🚿',cat:'Plumbing',months:12},
-  {name:'Septic tank pump',icon:'💧',cat:'Plumbing',months:36},
-  {name:'Well water test',icon:'🧪',cat:'Plumbing',months:12},
-  {name:'Drain cleaning',icon:'🔩',cat:'Plumbing',months:12},
+  {name:'Snow removal',icon:'❄️',cat:'Exterior',months:1},
+  {name:'Pool servicing',icon:'🏊',cat:'Exterior',months:1},
+  {name:'Light bulbs (exterior)',icon:'💡',cat:'Exterior',months:12},
+  {name:'Foundation crack check',icon:'🏗️',cat:'Exterior',months:12},
+  {name:'Pressure washing',icon:'🚿',cat:'Exterior',months:12},
+  // Interior
   {name:'Chimney sweep',icon:'🏚️',cat:'Interior',months:12},
   {name:'Dryer vent cleaning',icon:'🌀',cat:'Interior',months:12},
   {name:'Garage door service',icon:'🚗',cat:'Interior',months:12},
   {name:'Window seal check',icon:'🪟',cat:'Interior',months:24},
+  {name:'Light bulbs (interior)',icon:'💡',cat:'Interior',months:12},
+  {name:'House cleaning',icon:'🧹',cat:'Interior',months:1},
+  // Plumbing
+  {name:'Water heater flush',icon:'🚿',cat:'Plumbing',months:12},
+  {name:'Septic tank pump',icon:'💧',cat:'Plumbing',months:36},
+  {name:'Well water test',icon:'🧪',cat:'Plumbing',months:12},
+  {name:'Drain cleaning',icon:'🔩',cat:'Plumbing',months:12},
+  // Safety
   {name:'Smoke detector test',icon:'🔔',cat:'Safety',months:6},
   {name:'Carbon monoxide test',icon:'⚠️',cat:'Safety',months:6},
   {name:'Fire extinguisher check',icon:'🧯',cat:'Safety',months:12},
   {name:'Electrical panel inspect',icon:'⚡',cat:'Safety',months:60},
+  // Lawn
   {name:'Lawn fertilization',icon:'🌱',cat:'Lawn',months:3},
   {name:'Tree trimming',icon:'🌳',cat:'Lawn',months:12},
   {name:'Sprinkler inspection',icon:'💦',cat:'Lawn',months:6},
   {name:'Landscape mulch',icon:'🍁',cat:'Lawn',months:12},
+  {name:'Lawn mowing',icon:'🌿',cat:'Lawn',months:1},
+  {name:'Leaf removal',icon:'🍂',cat:'Lawn',months:3},
+  // Fees
+  {name:'HOA fees',icon:'🏘️',cat:'Fees',months:1},
+  {name:'Facilities fees',icon:'🏢',cat:'Fees',months:1},
+  {name:'Condo fees',icon:'🏙️',cat:'Fees',months:1},
 ];
 
 let homes=[],tasks=[],history=[],docs=[],activeHomeId='all',activeFilter='All';
@@ -1198,7 +1221,8 @@ async function saveEdit(id){
 // ══ MARK DONE ══
 function openMarkDone(id){
   const t=tasks.find(x=>x.id===id);if(!t)return;
-  const home=homes.find(h=>h.id===t.homeId);
+  // Reset pending uploads for this session
+  window._pendingDocs = [];
   modal(`<div class="modal-header"><div class="modal-title">${t.icon} Mark Done</div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:${homes.length>1?8:16}px">${esc(t.name)}</div>
     ${homes.length>1?`<div style="margin-bottom:16px">${homeTagHtml(t.homeId)}</div>`:''}
@@ -1208,6 +1232,22 @@ function openMarkDone(id){
       <div class="form-group"><label class="form-label">Cost ($)</label><input class="form-input" id="md-cost" type="number" min="0" value="${t.lastCost||''}"></div>
     </div>
     <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="md-notes" placeholder="Anything worth remembering..."></textarea></div>
+
+    <div style="margin-top:4px">
+      <label class="form-label">📎 Attach Invoice or Photo</label>
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <button class="btn btn-ghost" style="flex:1;justify-content:center;padding:10px" onclick="document.getElementById('md-camera').click()">
+          📷 Take Photo
+        </button>
+        <button class="btn btn-ghost" style="flex:1;justify-content:center;padding:10px" onclick="document.getElementById('md-file').click()">
+          📄 Upload File
+        </button>
+      </div>
+      <input type="file" id="md-camera" accept="image/*" capture="environment" style="display:none" onchange="handleMarkDoneFile(event)">
+      <input type="file" id="md-file" accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple style="display:none" onchange="handleMarkDoneFile(event)">
+      <div id="md-doc-preview" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+
     <div class="form-footer"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="confirmDone('${id}')">✓ Confirm Done</button></div>`);
 }
 async function confirmDone(id){
@@ -1229,7 +1269,18 @@ async function confirmDone(id){
     home_id:t.homeId, date, vendor:vendor||null,
     cost:cost?Number(cost):null, notes:notes||null
   }).select().single();
+  const histId = hData?.id || null;
   if(hData) history.unshift({id:hData.id,taskId:id,taskName:t.name,homeId:t.homeId,date,vendor:vendor||null,cost:cost?Number(cost):null,notes:notes||null});
+  // Save any pending docs linked to this task + history entry
+  if(window._pendingDocs && window._pendingDocs.length > 0){
+    window._pendingDocs.forEach(doc=>{
+      doc.taskId = id;
+      doc.histId = histId;
+      docs.push(doc);
+    });
+    try{ localStorage.setItem('hm-docs-v4', JSON.stringify(docs)); }catch(e){}
+    window._pendingDocs = [];
+  }
   render();closeModal();
 }
 
@@ -1239,9 +1290,36 @@ function openTaskHistory(id){
   const h=history.filter(x=>x.taskId===id).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const rows=h.length===0
     ?'<div class="empty"><span class="empty-icon">📋</span><div class="empty-sub">No history yet.</div></div>'
-    :h.map(x=>`<div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px"><div style="font-size:12px;color:var(--text3);min-width:90px">${fmtDate(x.date)}</div><div style="flex:1">${x.vendor?`<div style="font-size:13px;font-weight:500">${esc(x.vendor)}</div>`:''} ${x.notes?`<div style="font-size:12px;color:var(--text3);font-style:italic">${esc(x.notes)}</div>`:''}</div>${x.cost?`<div style="font-weight:600;color:var(--green)">${fmtMoney(x.cost)}</div>`:''}</div>`).join('');
+    :h.map(x=>{
+      // Find docs linked to this history entry or task
+      const histDocs = docs.filter(d=>d.histId===x.id || (d.taskId===id && !d.histId));
+      const docPreviews = histDocs.length > 0 ? `
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+          ${histDocs.map(d=>`
+            <div onclick="${d.type.startsWith('image/')?`previewDoc('${d.id}')`:`downloadDoc('${d.id}')`}" 
+              style="cursor:pointer;display:flex;align-items:center;gap:5px;padding:4px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-xs)">
+              <span style="font-size:14px">${docIcon(d.type)}</span>
+              <span style="font-size:11px;color:var(--text2);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.name)}</span>
+            </div>`).join('')}
+        </div>` : '';
+      return `<div style="padding:12px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="font-size:12px;color:var(--text3);min-width:90px;padding-top:2px">${fmtDate(x.date)}</div>
+          <div style="flex:1">
+            ${x.vendor?`<div style="font-size:13px;font-weight:500">${esc(x.vendor)}</div>`:''}
+            ${x.notes?`<div style="font-size:12px;color:var(--text3);font-style:italic;margin-top:2px">${esc(x.notes)}</div>`:''}
+            ${docPreviews}
+          </div>
+          ${x.cost?`<div style="font-weight:600;color:var(--green);white-space:nowrap">${fmtMoney(x.cost)}</div>`:''}
+        </div>
+      </div>`;
+    }).join('');
   modal(`<div class="modal-header"><div class="modal-title">${t.icon} ${esc(t.name)}</div><button class="modal-close" onclick="closeModal()">×</button></div>
-    ${rows}<div style="text-align:right;margin-top:16px"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`);
+    ${rows}
+    <div style="display:flex;gap:8px;justify-content:space-between;margin-top:16px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="openDocs('${id}')">📎 Manage All Docs</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+    </div>`);
 }
 async function deleteTask(id){
   if(!confirm('Delete this task?'))return;
@@ -1252,6 +1330,55 @@ async function deleteTask(id){
 }
 
 // ══ DOCUMENTS ══
+function handleMarkDoneFile(event){
+  const files = Array.from(event.target.files);
+  if(!files.length) return;
+  const preview = document.getElementById('md-doc-preview');
+  files.forEach(file=>{
+    if(file.size > 4*1024*1024){
+      alert('"' + file.name + '" is too large. Max 4MB per file.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const doc = {
+        id: 'd'+Date.now()+Math.random().toString(36).slice(2,6),
+        taskId: null, // set when task id is known — filled in confirmDone
+        histId: null, // linked to history entry
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size,
+        data: e.target.result,
+        uploadedAt: new Date().toISOString().slice(0,10)
+      };
+      if(!window._pendingDocs) window._pendingDocs = [];
+      window._pendingDocs.push(doc);
+      // Show preview
+      if(preview){
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-xs);border:1px solid var(--border)';
+        const isImage = file.type.startsWith('image/');
+        row.innerHTML = `
+          <span style="font-size:20px">${isImage?'🖼️':file.type==='application/pdf'?'📄':'📎'}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(file.name)}</div>
+            <div style="font-size:11px;color:var(--text3)">${fmtSize(file.size)}</div>
+          </div>
+          ${isImage ? `<img src="${e.target.result}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0">` : ''}
+          <button onclick="removePendingDoc('${doc.id}',this.parentElement)" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 6px">×</button>`;
+        preview.appendChild(row);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+  // Reset input so same file can be selected again
+  event.target.value = '';
+}
+
+function removePendingDoc(docId, rowEl){
+  window._pendingDocs = (window._pendingDocs||[]).filter(d=>d.id!==docId);
+  if(rowEl) rowEl.remove();
+}
 function openDocs(taskId){
   const t=tasks.find(x=>x.id===taskId);if(!t)return;
   renderDocsModal(taskId,docs.filter(d=>d.taskId===taskId),t);
