@@ -904,8 +904,15 @@ async function loadData(){
     const {data:appData,error:appErr} = await sb.from('appliances').select('*').order('created_at');
     if(!appErr) appliances = (appData||[]).map(a=>({id:a.id,homeId:a.home_id,name:a.name,brand:a.brand||null,model:a.model||null,notes:a.notes||null}));
 
-    // docs still in localStorage
-    try{docs=JSON.parse(localStorage.getItem(DOK))||[];}catch(e){docs=[];}
+    // Load docs metadata from Supabase (file data fetched on demand via signed URLs)
+    const {data:docsData} = await sb.from('docs').select('*').order('created_at');
+    docs = (docsData||[]).map(d=>({
+      id:d.id, taskId:d.task_id||null, histId:d.hist_id||null,
+      applianceId:d.appliance_id||null, name:d.name,
+      type:d.file_type||'application/octet-stream',
+      size:d.size||0, path:d.storage_path,
+      uploadedAt:d.created_at?d.created_at.slice(0,10):null
+    }));
     try{activeHomeId=localStorage.getItem(ACK)||'all';}catch(e){}
     if(activeHomeId!=='all'&&!homes.find(h=>h.id===activeHomeId))activeHomeId='all';
 
@@ -920,8 +927,7 @@ async function loadData(){
 }
 
 async function saveData(){
-  // docs and activeHomeId still in localStorage
-  try{localStorage.setItem(DOK,JSON.stringify(docs));}catch(e){}
+  // Only activeHomeId in localStorage — docs now in Supabase
   try{localStorage.setItem(ACK,activeHomeId);}catch(e){}
 }
 function homeColor(homeId){
@@ -1307,15 +1313,15 @@ async function confirmDone(id){
   }).select().single();
   const histId = hData?.id || null;
   if(hData) history.unshift({id:hData.id,taskId:id,taskName:t.name,homeId:t.homeId,date,vendor:vendor||null,cost:cost?Number(cost):null,notes:notes||null});
-  // Save any pending docs linked to this task + history entry
-  if(window._pendingDocs && window._pendingDocs.length > 0){
-    window._pendingDocs.forEach(doc=>{
-      doc.taskId = id;
-      doc.histId = histId;
-      docs.push(doc);
-    });
-    try{ localStorage.setItem('hm-docs-v4', JSON.stringify(docs)); }catch(e){}
-    window._pendingDocs = [];
+  // Upload any pending files to Supabase Storage
+  if(window._pendingFiles && window._pendingFiles.length > 0){
+    const btn = document.querySelector('#modal-content .btn-primary');
+    if(btn){btn.textContent='Uploading...';btn.disabled=true;}
+    for(const {file} of window._pendingFiles){
+      try{ await uploadToStorage(file, id, histId, null); }
+      catch(err){ console.error('Upload error:',err); }
+    }
+    window._pendingFiles = [];
   }
   render();closeModal();
 }
@@ -1366,54 +1372,127 @@ async function deleteTask(id){
 }
 
 // ══ DOCUMENTS ══
+// ══ SUPABASE STORAGE HELPERS ══
+async function uploadToStorage(file, taskId=null, histId=null, applianceId=null){
+  if(!currentUser) throw new Error('Not logged in');
+  const ext = file.name.split('.').pop();
+  const path = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).slice(2,6)}.${ext}`;
+  // Upload file to Supabase Storage
+  const {error:upErr} = await sb.storage.from('user-files').upload(path, file, {
+    contentType: file.type || 'application/octet-stream',
+    upsert: false
+  });
+  if(upErr) throw upErr;
+  // Save metadata to docs table
+  const {data:docRow, error:dbErr} = await sb.from('docs').insert({
+    user_id: currentUser.id,
+    task_id: taskId||null,
+    hist_id: histId||null,
+    appliance_id: applianceId||null,
+    name: file.name,
+    file_type: file.type||'application/octet-stream',
+    size: file.size,
+    storage_path: path
+  }).select().single();
+  if(dbErr) throw dbErr;
+  const doc = {
+    id:docRow.id, taskId:taskId||null, histId:histId||null,
+    applianceId:applianceId||null, name:file.name,
+    type:file.type||'application/octet-stream',
+    size:file.size, path:path,
+    uploadedAt:new Date().toISOString().slice(0,10)
+  };
+  docs.push(doc);
+  return doc;
+}
+
+async function getSignedUrl(path){
+  const {data} = await sb.storage.from('user-files').createSignedUrl(path, 3600);
+  return data?.signedUrl || null;
+}
+
+async function downloadDoc(docId){
+  const d=docs.find(x=>x.id===docId);if(!d)return;
+  const url = await getSignedUrl(d.path);
+  if(!url){alert('Could not get download link. Please try again.');return;}
+  const a=document.createElement('a');a.href=url;a.download=d.name;a.target='_blank';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+
+async function previewDoc(docId){
+  const d=docs.find(x=>x.id===docId);if(!d)return;
+  const url = await getSignedUrl(d.path);
+  if(!url){alert('Could not load preview. Please try again.');return;}
+  if(d.type.startsWith('image/')){
+    const w=window.open();
+    w.document.write(`<img src="${url}" style="max-width:100%;height:auto">`);
+  } else {
+    window.open(url,'_blank');
+  }
+}
+
+async function deleteDoc(docId,taskId){
+  if(!confirm('Delete this document?'))return;
+  const d=docs.find(x=>x.id===docId);if(!d)return;
+  // Delete from storage
+  await sb.storage.from('user-files').remove([d.path]);
+  // Delete metadata
+  await sb.from('docs').delete().eq('id',docId);
+  docs=docs.filter(x=>x.id!==docId);
+  if(taskId){const t=tasks.find(x=>x.id===taskId);renderDocsModal(taskId,docs.filter(x=>x.taskId===taskId),t);}
+  render();
+}
+
+async function deleteFileFromAll(docId){
+  if(!confirm('Delete this file?'))return;
+  const d=docs.find(x=>x.id===docId);if(!d)return;
+  await sb.storage.from('user-files').remove([d.path]);
+  await sb.from('docs').delete().eq('id',docId);
+  docs=docs.filter(x=>x.id!==docId);
+  renderFiles();render();
+}
+
+// Image thumbnail using signed URL (cached in element)
+async function loadImgSrc(imgEl, path){
+  const url = await getSignedUrl(path);
+  if(url && imgEl) imgEl.src = url;
+}
+
 function handleMarkDoneFile(event){
   const files = Array.from(event.target.files);
   if(!files.length) return;
   const preview = document.getElementById('md-doc-preview');
   files.forEach(file=>{
-    if(file.size > 4*1024*1024){
-      alert('"' + file.name + '" is too large. Max 4MB per file.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = e => {
-      const doc = {
-        id: 'd'+Date.now()+Math.random().toString(36).slice(2,6),
-        taskId: null, // set when task id is known — filled in confirmDone
-        histId: null, // linked to history entry
-        name: file.name,
-        type: file.type || 'application/octet-stream',
-        size: file.size,
-        data: e.target.result,
-        uploadedAt: new Date().toISOString().slice(0,10)
-      };
-      if(!window._pendingDocs) window._pendingDocs = [];
-      window._pendingDocs.push(doc);
-      // Show preview
-      if(preview){
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-xs);border:1px solid var(--border)';
-        const isImage = file.type.startsWith('image/');
-        row.innerHTML = `
-          <span style="font-size:20px">${isImage?'🖼️':file.type==='application/pdf'?'📄':'📎'}</span>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(file.name)}</div>
-            <div style="font-size:11px;color:var(--text3)">${fmtSize(file.size)}</div>
-          </div>
-          ${isImage ? `<img src="${e.target.result}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0">` : ''}
-          <button onclick="removePendingDoc('${doc.id}',this.parentElement)" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 6px">×</button>`;
-        preview.appendChild(row);
+    if(file.size > 20*1024*1024){ alert('"'+file.name+'" is too large. Max 20MB.'); return; }
+    const tempId = 'd'+Date.now()+Math.random().toString(36).slice(2,6);
+    if(!window._pendingFiles) window._pendingFiles = [];
+    window._pendingFiles.push({tempId, file});
+    if(preview){
+      const isImage = file.type.startsWith('image/');
+      const row = document.createElement('div');
+      row.id = 'pf-'+tempId;
+      row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-xs);border:1px solid var(--border)';
+      row.innerHTML=`<span style="font-size:20px">${isImage?'🖼️':file.type==='application/pdf'?'📄':'📎'}</span>
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(file.name)}</div>
+        <div style="font-size:11px;color:var(--text3)">${fmtSize(file.size)}</div></div>
+        <button onclick="removePendingFile('${tempId}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 6px">×</button>`;
+      if(isImage){
+        const img = document.createElement('img');
+        img.style.cssText='width:48px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0';
+        const reader = new FileReader();
+        reader.onload = e=>{ img.src=e.target.result; };
+        reader.readAsDataURL(file);
+        row.insertBefore(img, row.lastElementChild);
       }
-    };
-    reader.readAsDataURL(file);
+      preview.appendChild(row);
+    }
   });
-  // Reset input so same file can be selected again
-  event.target.value = '';
+  event.target.value='';
 }
 
-function removePendingDoc(docId, rowEl){
-  window._pendingDocs = (window._pendingDocs||[]).filter(d=>d.id!==docId);
-  if(rowEl) rowEl.remove();
+function removePendingFile(tempId){
+  window._pendingFiles=(window._pendingFiles||[]).filter(f=>f.tempId!==tempId);
+  const el=document.getElementById('pf-'+tempId);if(el)el.remove();
 }
 function openDocs(taskId){
   const t=tasks.find(x=>x.id===taskId);if(!t)return;
@@ -1442,27 +1521,27 @@ function renderDocsModal(taskId,taskDocs,t){
     zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag-over');handleFileUpload({target:{files:e.dataTransfer.files}},taskId);});
   }
 }
-function handleFileUpload(event,taskId){
+async function handleFileUpload(event,taskId){
   const files=Array.from(event.target.files);if(!files.length)return;
-  const statusEl=document.getElementById('upload-status');let processed=0;
-  files.forEach(file=>{
-    if(file.size>4*1024*1024){if(statusEl)statusEl.textContent=`"${file.name}" is too large (max 4MB).`;return;}
-    const reader=new FileReader();
-    reader.onload=e=>{
-      docs.push({id:'d'+Date.now()+Math.random().toString(36).slice(2,6),taskId,name:file.name,type:file.type||'application/octet-stream',size:file.size,data:e.target.result,uploadedAt:new Date().toISOString().slice(0,10)});
-      processed++;saveData();
-      if(processed===files.length){const t=tasks.find(x=>x.id===taskId);renderDocsModal(taskId,docs.filter(d=>d.taskId===taskId),t);render();}
-    };
-    reader.readAsDataURL(file);
-  });
+  const statusEl=document.getElementById('upload-status');
+  if(statusEl){statusEl.textContent='Uploading...';statusEl.style.color='var(--brand)';}
+  let uploaded=0;
+  for(const file of files){
+    if(file.size>20*1024*1024){if(statusEl)statusEl.textContent='"'+file.name+'" too large (max 20MB).';continue;}
+    try{
+      await uploadToStorage(file, taskId, null, null);
+      uploaded++;
+    }catch(err){
+      console.error('Upload error:',err);
+      if(statusEl)statusEl.textContent='Error uploading "'+file.name+'": '+err.message;
+    }
+  }
+  if(statusEl&&uploaded>0){statusEl.textContent=uploaded+' file'+(uploaded!==1?'s':'')+' uploaded!';statusEl.style.color='var(--green)';}
+  const t=tasks.find(x=>x.id===taskId);
+  renderDocsModal(taskId,docs.filter(d=>d.taskId===taskId),t);
+  render();
 }
-function downloadDoc(docId){const d=docs.find(x=>x.id===docId);if(!d)return;const a=document.createElement('a');a.href=d.data;a.download=d.name;document.body.appendChild(a);a.click();document.body.removeChild(a);}
-function previewDoc(docId){const d=docs.find(x=>x.id===docId);if(!d)return;const w=window.open();w.document.write(`<img src="${d.data}" style="max-width:100%;height:auto">`);}
-function deleteDoc(docId,taskId){
-  if(!confirm('Delete this document?'))return;
-  docs=docs.filter(d=>d.id!==docId);saveData();
-  const t=tasks.find(x=>x.id===taskId);renderDocsModal(taskId,docs.filter(d=>d.taskId===taskId),t);render();
-}
+// downloadDoc, previewDoc, deleteDoc now async via Supabase Storage (defined above)
 function docIcon(type){if(type==='application/pdf')return'📄';if(type.startsWith('image/'))return'🖼';if(type.includes('word')||type.includes('document'))return'📝';if(type.includes('sheet')||type.includes('excel')||type.includes('csv'))return'📊';return'📎';}
 function fmtSize(bytes){if(bytes<1024)return bytes+'B';if(bytes<1024*1024)return Math.round(bytes/1024)+'KB';return(bytes/(1024*1024)).toFixed(1)+'MB';}
 
@@ -1714,6 +1793,14 @@ function renderFiles(){
     }
   }
 
+  // Load image thumbnails asynchronously
+  setTimeout(()=>{
+    docs.filter(d=>d.type&&d.type.startsWith('image/')).forEach(d=>{
+      const img = document.getElementById('fcard-'+d.id);
+      if(img && d.path) loadImgSrc(img, d.path);
+    });
+  }, 50);
+
   // Empty state
   if(docs.length === 0){
     el.innerHTML = '<div class="empty"><span class="empty-icon">📁</span><div class="empty-text">No files yet</div><div class="empty-sub">Add invoices, warranties, and photos to keep everything in one place.</div></div>';
@@ -1726,7 +1813,7 @@ function makeFileCard(d, tagLabel, tagType){
   const isImage = d.type && d.type.startsWith('image/');
   const tagColor = tagType==='task' ? 'background:var(--brand-light);color:var(--brand)' : 'background:var(--green-bg);color:var(--green-text)';
   div.innerHTML = `
-    ${isImage ? `<img src="${d.data}" class="file-card-img" onclick="previewDoc('${d.id}')" alt="${esc(d.name)}">` :
+    ${isImage ? `<img id="fcard-${d.id}" class="file-card-img" onclick="previewDoc('${d.id}')" alt="${esc(d.name)}" style="cursor:pointer">` :
       `<div class="file-card-icon">${docIcon(d.type)}</div>`}
     <div class="file-card-name" title="${esc(d.name)}">${esc(d.name)}</div>
     <div class="file-card-meta">${fmtSize(d.size)} · ${fmtDate(d.uploadedAt)}</div>
@@ -1741,13 +1828,7 @@ function makeFileCard(d, tagLabel, tagType){
   return div;
 }
 
-function deleteFileFromAll(docId){
-  if(!confirm('Delete this file?')) return;
-  docs = docs.filter(d=>d.id!==docId);
-  try{ localStorage.setItem('hm-docs-v4', JSON.stringify(docs)); }catch(e){}
-  renderFiles();
-  render();
-}
+// deleteFileFromAll now handled by async version above
 
 function openAddFile(){
   // Build task options
@@ -1828,31 +1909,27 @@ function handleAfFile(event){
   const preview = document.getElementById('af-preview');
   if(!files.length) return;
   files.forEach(file=>{
-    if(file.size > 4*1024*1024){ alert('"'+file.name+'" is too large. Max 4MB.'); return; }
-    const reader = new FileReader();
-    reader.onload = e=>{
-      const doc = {
-        id: 'd'+Date.now()+Math.random().toString(36).slice(2,6),
-        name: file.name, type: file.type||'application/octet-stream',
-        size: file.size, data: e.target.result,
-        uploadedAt: new Date().toISOString().slice(0,10),
-        taskId: null, applianceId: null, histId: null
-      };
-      if(!window._afPendingDocs) window._afPendingDocs = [];
-      window._afPendingDocs.push(doc);
-      if(preview){
-        const isImg = file.type.startsWith('image/');
-        const row = document.createElement('div');
-        row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-xs);border:1px solid var(--border)';
-        row.innerHTML=`<span style="font-size:18px">${isImg?'🖼️':file.type==='application/pdf'?'📄':'📎'}</span>
-          <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(file.name)}</div>
-          <div style="font-size:11px;color:var(--text3)">${fmtSize(file.size)}</div></div>
-          ${isImg?`<img src="${e.target.result}" style="width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0">`:''}
-          <button onclick="this.parentElement.remove();window._afPendingDocs=window._afPendingDocs.filter(d=>d.id!=='${doc.id}')" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 6px">×</button>`;
-        preview.appendChild(row);
+    if(file.size > 20*1024*1024){ alert('"'+file.name+'" is too large. Max 20MB.'); return; }
+    const tempId = 'af'+Date.now()+Math.random().toString(36).slice(2,6);
+    if(!window._afPendingFiles) window._afPendingFiles = [];
+    window._afPendingFiles.push({tempId, file});
+    if(preview){
+      const isImg = file.type.startsWith('image/');
+      const row = document.createElement('div');
+      row.id = 'afp-'+tempId;
+      row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:var(--radius-xs);border:1px solid var(--border)';
+      row.innerHTML=`<span style="font-size:18px">${isImg?'🖼️':file.type==='application/pdf'?'📄':'📎'}</span>
+        <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(file.name)}</div>
+        <div style="font-size:11px;color:var(--text3)">${fmtSize(file.size)}</div></div>
+        <button onclick="window._afPendingFiles=window._afPendingFiles.filter(f=>f.tempId!=='${tempId}');this.closest('div').remove()" style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:2px 6px">×</button>`;
+      if(isImg){
+        const img=document.createElement('img');
+        img.style.cssText='width:44px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0';
+        const reader=new FileReader();reader.onload=e=>{img.src=e.target.result;};reader.readAsDataURL(file);
+        row.insertBefore(img,row.lastElementChild);
       }
-    };
-    reader.readAsDataURL(file);
+      preview.appendChild(row);
+    }
   });
   event.target.value='';
 }
@@ -1894,14 +1971,18 @@ async function saveAddFile(){
     }
   }
 
-  // Save all pending docs
-  window._afPendingDocs.forEach(doc=>{
-    doc.taskId = taskId;
-    doc.applianceId = applianceId;
-    docs.push(doc);
-  });
-  try{ localStorage.setItem('hm-docs-v4', JSON.stringify(docs)); }catch(e){}
-  window._afPendingDocs = [];
+  // Upload all pending files to Supabase Storage
+  if(!window._afPendingFiles || window._afPendingFiles.length===0){
+    // No files selected — still save the appliance if new one was created
+    closeModal(); renderFiles(); return;
+  }
+  const saveBtn = document.querySelector('#modal-content .btn-primary');
+  if(saveBtn){saveBtn.textContent='Uploading...';saveBtn.disabled=true;}
+  for(const {file} of window._afPendingFiles){
+    try{ await uploadToStorage(file, taskId, null, applianceId); }
+    catch(err){ console.error('Upload error:',err); alert('Error uploading "'+file.name+'": '+err.message); }
+  }
+  window._afPendingFiles = [];
   closeModal();
   renderFiles();
   render();
