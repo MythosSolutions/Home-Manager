@@ -1285,8 +1285,8 @@ function openMarkDone(id){
           📄 Upload File
         </button>
       </div>
-      <input type="file" id="md-camera" accept="image/*" capture="environment" style="display:none" onchange="handleMarkDoneFile(event)">
-      <input type="file" id="md-file" accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple style="display:none" onchange="handleMarkDoneFile(event)">
+      <input type="file" id="md-camera" accept="image/*" capture="environment" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;left:-9999px" onchange="handleMarkDoneFile(event)">
+      <input type="file" id="md-file" accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;left:-9999px" onchange="handleMarkDoneFile(event)">
       <div id="md-doc-preview" style="display:flex;flex-direction:column;gap:6px"></div>
     </div>
 
@@ -1510,7 +1510,7 @@ function renderDocsModal(taskId,taskDocs,t){
         <div class="upload-text">Click or drag files here</div>
         <div class="upload-sub">PDFs, images, Word, Excel — max 4MB each</div>
       </div>
-      <input type="file" id="fi-${taskId}" style="display:none" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt,.csv" onchange="handleFileUpload(event,'${taskId}')">
+      <input type="file" id="fi-${taskId}" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;left:-9999px" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt,.csv" onchange="handleFileUpload(event,'${taskId}')">
       <div id="upload-status" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
     </div>
     <div class="form-footer"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`);
@@ -1879,8 +1879,8 @@ function openAddFile(){
         <button class="btn btn-ghost" style="flex:1;justify-content:center;padding:10px" onclick="document.getElementById('af-camera').click()">📷 Take Photo</button>
         <button class="btn btn-ghost" style="flex:1;justify-content:center;padding:10px" onclick="document.getElementById('af-file').click()">📄 Upload File</button>
       </div>
-      <input type="file" id="af-camera" accept="image/*" capture="environment" style="display:none" onchange="handleAfFile(event)">
-      <input type="file" id="af-file" accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple style="display:none" onchange="handleAfFile(event)">
+      <input type="file" id="af-camera" accept="image/*" capture="environment" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;left:-9999px" onchange="handleAfFile(event)">
+      <input type="file" id="af-file" accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx,.txt,.csv" multiple style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;left:-9999px" onchange="handleAfFile(event)">
       <div id="af-preview" style="display:flex;flex-direction:column;gap:6px"></div>
     </div>
 
